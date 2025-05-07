@@ -1,0 +1,378 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\PublishedCase;
+use App\Models\LegalCase;
+use App\Models\Lawyer;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+
+class PublishedCaseController extends Controller
+{
+    /**
+     * نشر قضية للعامة للمحامين
+     * Publish a case for lawyers to view and make offers
+     */
+    public function publishCase(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            
+            if (!$user || $user->role !== 'client') {
+                return response()->json(['message' => 'غير مصرح. يمكن للعملاء فقط نشر القضايا.'], 403);
+            }
+            
+            $client = $user->client;
+            
+            if (!$client) {
+                return response()->json(['message' => 'لم يتم العثور على ملف العميل.'], 404);
+            }
+            
+            // التحقق من البيانات المدخلة
+            $validated = $request->validate([
+                'case_number' => 'required|string|unique:cases,case_number',
+                'plaintiff_name' => 'nullable|string|max:255',
+                'defendant_name' => 'nullable|string|max:255',
+                'description' => 'nullable|string',
+                'target_city' => 'nullable|string',
+                'target_specialization' => 'required|in:Family Law,Criminal Law,Civil Law,Commercial Law,International Law',
+            ]);
+            
+            // إنشاء القضية الأساسية أولاً - use target_specialization for case_type
+            $legalCase = LegalCase::create([
+                'case_number' => $validated['case_number'],
+                'plaintiff_name' => $validated['plaintiff_name'] ?? null,
+                'defendant_name' => $validated['defendant_name'] ?? null,
+                'case_type' => $validated['target_specialization'], // Set case_type to match target_specialization
+                'description' => $validated['description'] ?? null,
+                'status' => 'Pending', // حالة معلقة حتى يتم قبول عرض
+                'created_by_id' => $user->id,
+            ]);
+            
+            // ثم إنشاء قضية منشورة مرتبطة بها - بدون تكرار البيانات
+            $publishedCase = PublishedCase::create([
+                'case_id' => $legalCase->case_id,
+                'client_id' => $client->client_id,
+                'status' => 'Active', // حالة نشطة لاستقبال العروض
+                'target_city' => $validated['target_city'] ?? null,
+                'target_specialization' => $validated['target_specialization'],
+            ]);
+            
+            // Load the legal case relationship for the response
+            $publishedCase->load('legalCase');
+            
+            return response()->json([
+                'message' => 'تم نشر القضية بنجاح.',
+                'published_case' => [
+                    'published_case_id' => $publishedCase->published_case_id,
+                    'status' => $publishedCase->status,
+                    'target_city' => $publishedCase->target_city,
+                    'target_specialization' => $publishedCase->target_specialization,
+                    'created_at' => $publishedCase->created_at,
+                    'case' => [
+                        'case_id' => $legalCase->case_id,
+                        'case_number' => $legalCase->case_number,
+                        'plaintiff_name' => $legalCase->plaintiff_name,
+                        'defendant_name' => $legalCase->defendant_name,
+                        'case_type' => $legalCase->case_type,
+                        'description' => $legalCase->description,
+                        'status' => $legalCase->status,
+                    ]
+                ]
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Error in publishCase: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
+            
+            return response()->json([
+                'message' => 'حدث خطأ أثناء نشر القضية.',
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
+    
+    /**
+     * الحصول على قائمة القضايا المنشورة المتاحة للمحامي
+     * Get available published cases for a lawyer based on specialization and city
+     */
+    public function getAvailableCasesForLawyer()
+    {
+        try {
+            $user = Auth::user();
+            
+            if (!$user || $user->role !== 'lawyer') {
+                return response()->json(['message' => 'غير مصرح. يمكن للمحامين فقط عرض القضايا المتاحة.'], 403);
+            }
+            
+            $lawyer = $user->lawyer;
+            
+            if (!$lawyer) {
+                return response()->json(['message' => 'لم يتم العثور على ملف المحامي.'], 404);
+            }
+            
+            // الحصول على القضايا المنشورة المناسبة لتخصص وموقع المحامي
+            // Only get cases that match lawyer's specialization and city exactly
+            $publishedCases = PublishedCase::with(['legalCase', 'client.user'])
+                ->where('status', 'Active')
+                ->where('target_specialization', $lawyer->specialization)
+                ->orderBy('created_at', 'desc')
+                ->paginate(15);
+            
+            // Format the response
+            $formattedCases = $publishedCases->map(function($publishedCase) {
+                return [
+                    'published_case_id' => $publishedCase->published_case_id,
+                    'status' => $publishedCase->status,
+                    'target_city' => $publishedCase->target_city,
+                    'target_specialization' => $publishedCase->target_specialization,
+                    'created_at' => $publishedCase->created_at,
+                    'case' => $publishedCase->legalCase ? [
+                        'case_id' => $publishedCase->legalCase->case_id,
+                        'case_number' => $publishedCase->legalCase->case_number,
+                        'plaintiff_name' => $publishedCase->legalCase->plaintiff_name,
+                        'defendant_name' => $publishedCase->legalCase->defendant_name,
+                        'case_type' => $publishedCase->legalCase->case_type,
+                        'description' => $publishedCase->legalCase->description,
+                        'status' => $publishedCase->legalCase->status,
+                    ] : null,
+                    'client' => $publishedCase->client ? [
+                        'client_id' => $publishedCase->client->client_id,
+                        'name' => $publishedCase->client->user->name,
+                        'city' => $publishedCase->client->city
+                    ] : null
+                ];
+            });
+                
+            // Create a paginated response while preserving pagination metadata
+            return response()->json([
+                'data' => $formattedCases,
+                'current_page' => $publishedCases->currentPage(),
+                'last_page' => $publishedCases->lastPage(),
+                'per_page' => $publishedCases->perPage(),
+                'total' => $publishedCases->total(),
+                'links' => [
+                    'prev' => $publishedCases->previousPageUrl(),
+                    'next' => $publishedCases->nextPageUrl(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error in getAvailableCasesForLawyer: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'حدث خطأ أثناء جلب القضايا المتاحة.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * الحصول على قائمة القضايا المنشورة للعميل
+     * Get published cases for the authenticated client
+     */
+    public function getClientPublishedCases()
+    {
+        try {
+            $user = Auth::user();
+            
+            if (!$user || $user->role !== 'client') {
+                return response()->json(['message' => 'غير مصرح. يمكن للعملاء فقط عرض قضاياهم المنشورة.'], 403);
+            }
+            
+            $client = $user->client;
+            
+            if (!$client) {
+                return response()->json(['message' => 'لم يتم العثور على ملف العميل.'], 404);
+            }
+            
+            $publishedCases = PublishedCase::with(['legalCase', 'offers.lawyer.user'])
+                ->where('client_id', $client->client_id)
+                ->orderBy('created_at', 'desc')
+                ->paginate(15);
+            
+            // Format the response
+            $formattedCases = $publishedCases->map(function($publishedCase) {
+                return [
+                    'published_case_id' => $publishedCase->published_case_id,
+                    'status' => $publishedCase->status,
+                    'target_city' => $publishedCase->target_city,
+                    'target_specialization' => $publishedCase->target_specialization,
+                    'created_at' => $publishedCase->created_at,
+                    'case' => $publishedCase->legalCase ? [
+                        'case_id' => $publishedCase->legalCase->case_id,
+                        'case_number' => $publishedCase->legalCase->case_number,
+                        'plaintiff_name' => $publishedCase->legalCase->plaintiff_name,
+                        'defendant_name' => $publishedCase->legalCase->defendant_name,
+                        'case_type' => $publishedCase->legalCase->case_type,
+                        'description' => $publishedCase->legalCase->description,
+                        'status' => $publishedCase->legalCase->status,
+                    ] : null,
+                    'offers' => $publishedCase->offers->map(function($offer) {
+                        return [
+                            'offer_id' => $offer->offer_id,
+                            'status' => $offer->status,
+                            'message' => $offer->message,
+                            'created_at' => $offer->created_at,
+                            'lawyer' => $offer->lawyer ? [
+                                'lawyer_id' => $offer->lawyer->lawyer_id,
+                                'name' => $offer->lawyer->user->name,
+                                'specialization' => $offer->lawyer->specialization,
+                                'years_of_experience' => $offer->lawyer->years_of_experience
+                            ] : null
+                        ];
+                    })
+                ];
+            });
+                
+            // Create a paginated response while preserving pagination metadata
+            return response()->json([
+                'data' => $formattedCases,
+                'current_page' => $publishedCases->currentPage(),
+                'last_page' => $publishedCases->lastPage(),
+                'per_page' => $publishedCases->perPage(),
+                'total' => $publishedCases->total(),
+                'links' => [
+                    'prev' => $publishedCases->previousPageUrl(),
+                    'next' => $publishedCases->nextPageUrl(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error in getClientPublishedCases: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'حدث خطأ أثناء جلب القضايا المنشورة.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * الحصول على تفاصيل قضية منشورة محددة
+     * Get details for a specific published case
+     */
+    public function show($id)
+    {
+        try {
+            $publishedCase = PublishedCase::with(['legalCase', 'client.user', 'offers.lawyer.user'])
+                ->findOrFail($id);
+                
+            $user = Auth::user();
+            
+            // التحقق من الصلاحيات: المحامي يمكنه الاطلاع فقط إذا كانت القضية متاحة له
+            if ($user->role === 'lawyer') {
+                $lawyer = $user->lawyer;
+                
+                // Check if specialization matches - no exceptions
+                if ($publishedCase->target_specialization !== $lawyer->specialization) {
+                    return response()->json(['message' => 'غير مصرح. هذه القضية لا تناسب تخصصك.'], 403);
+                }
+                
+              
+            }
+            // إذا كان العميل، تأكد أنه صاحب القضية
+            else if ($user->role === 'client' && $user->client->client_id !== $publishedCase->client_id) {
+                return response()->json(['message' => 'غير مصرح. هذه ليست قضيتك.'], 403);
+            }
+            
+            // Format the response
+            $response = [
+                'published_case_id' => $publishedCase->published_case_id,
+                'status' => $publishedCase->status,
+                'target_city' => $publishedCase->target_city,
+                'target_specialization' => $publishedCase->target_specialization,
+                'created_at' => $publishedCase->created_at,
+                'case' => $publishedCase->legalCase ? [
+                    'case_id' => $publishedCase->legalCase->case_id,
+                    'case_number' => $publishedCase->legalCase->case_number,
+                    'plaintiff_name' => $publishedCase->legalCase->plaintiff_name,
+                    'defendant_name' => $publishedCase->legalCase->defendant_name,
+                    'case_type' => $publishedCase->legalCase->case_type,
+                    'description' => $publishedCase->legalCase->description,
+                    'status' => $publishedCase->legalCase->status,
+                ] : null,
+                'client' => $publishedCase->client ? [
+                    'client_id' => $publishedCase->client->client_id,
+                    'name' => $publishedCase->client->user->name, 
+                    'city' => $publishedCase->client->city
+                ] : null
+            ];
+            
+            // If the viewer is the client, include offers
+            if ($user->role === 'client' && $user->client->client_id === $publishedCase->client_id) {
+                $response['offers'] = $publishedCase->offers->map(function($offer) {
+                    return [
+                        'offer_id' => $offer->offer_id,
+                        'status' => $offer->status,
+                        'message' => $offer->message,
+                        'created_at' => $offer->created_at,
+                        'lawyer' => $offer->lawyer ? [
+                            'lawyer_id' => $offer->lawyer->lawyer_id,
+                            'name' => $offer->lawyer->user->name,
+                            'specialization' => $offer->lawyer->specialization,
+                            'years_of_experience' => $offer->lawyer->years_of_experience
+                        ] : null
+                    ];
+                });
+            }
+            
+            return response()->json($response);
+        } catch (\Exception $e) {
+            Log::error('Error in show published case: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'حدث خطأ أثناء عرض القضية المنشورة.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * إغلاق قضية منشورة
+     * Close a published case
+     */
+    public function closePublishedCase($id)
+    {
+        try {
+            $user = Auth::user();
+            
+            if (!$user || $user->role !== 'client') {
+                return response()->json(['message' => 'غير مصرح. يمكن للعملاء فقط إغلاق قضاياهم المنشورة.'], 403);
+            }
+            
+            $publishedCase = PublishedCase::findOrFail($id);
+            
+            // التأكد من أن العميل هو صاحب القضية
+            if ($user->client->client_id !== $publishedCase->client_id) {
+                return response()->json(['message' => 'غير مصرح. هذه ليست قضيتك.'], 403);
+            }
+            
+            // لا يمكن إغلاق قضية غير نشطة
+            if ($publishedCase->status !== 'Active') {
+                return response()->json([
+                    'message' => 'لا يمكن إغلاق هذه القضية. فقط القضايا النشطة يمكن إغلاقها.',
+                    'current_status' => $publishedCase->status
+                ], 400);
+            }
+            
+            $publishedCase->status = 'Closed';
+            $publishedCase->save();
+            
+            return response()->json([
+                'message' => 'تم إغلاق القضية المنشورة بنجاح.',
+                'published_case_id' => $publishedCase->published_case_id,
+                'status' => $publishedCase->status,
+                'updated_at' => $publishedCase->updated_at
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error in closePublishedCase: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'حدث خطأ أثناء إغلاق القضية المنشورة.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+} 

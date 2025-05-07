@@ -1,0 +1,29 @@
+<?php
+
+namespace App\Providers;
+
+use Illuminate\Support\ServiceProvider;
+use App\Providers\RouteServiceProvider;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class AppServiceProvider extends ServiceProvider
+{
+    /**
+     * Register any application services.
+     */
+    public function register(): void
+    {
+        $this->app->register(RouteServiceProvider::class);
+        $this->app->register(ResourceServiceProvider::class);
+    }
+
+    /**
+     * Bootstrap any application services.
+     */
+    public function boot(): void
+    {
+        // Make sure API resources don't wrap data in a 'data' key by default
+        // Our BaseResource takes care of the wrapping
+        JsonResource::withoutWrapping();
+    }
+}

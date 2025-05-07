@@ -1,0 +1,5 @@
+{
+  "consultation_request_id": 1,
+  "payment_method": "credit_card",
+  "transaction_id": "txn_123456789"
+} 
