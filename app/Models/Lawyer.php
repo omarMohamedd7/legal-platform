@@ -13,10 +13,11 @@ class Lawyer extends Model
 
     protected $fillable = [
         'user_id',
-        'phone',
+        'phone_number',
         'specialization',
         'city',
         'consult_fee',
+        'bio',
     ];
 
     public function user()

@@ -2,37 +2,44 @@
 
 namespace App\Http\Resources;
 
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+
 trait BaseJsonResourceWrapping
 {
     /**
+     * Success status of the response.
+     *
      * @var bool
      */
-    protected $success = true;
+    protected bool $success = true;
 
     /**
+     * Custom message for the response.
+     *
      * @var string|null
      */
-    protected $message = null;
+    protected ?string $message = null;
 
     /**
-     * Add a message to the resource
+     * Add a message to the resource.
      *
      * @param string $message
      * @return $this
      */
-    public function withMessage(string $message)
+    public function withMessage(string $message): self
     {
         $this->message = $message;
         return $this;
     }
 
     /**
-     * Set the success status of the response
+     * Set the success status of the response.
      *
      * @param bool $success
      * @return $this
      */
-    public function withSuccess(bool $success)
+    public function withSuccess(bool $success): self
     {
         $this->success = $success;
         return $this;
@@ -41,35 +48,61 @@ trait BaseJsonResourceWrapping
     /**
      * Customize the response for a request.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \Illuminate\Http\JsonResponse  $response
+     * @param  Request  $request
+     * @param  JsonResponse  $response
      * @return void
      */
-    public function withResponse($request, $response)
+    public function withResponse($request, $response): void
     {
-        // Get original data from the resource
-        $data = json_decode($response->getContent(), true);
+        $data = $this->getOriginalData($response);
+        $wrapped = $this->wrapData($data);
         
-        // Wrap data with our standard format
+        $response->setData($wrapped);
+        $response->header('X-Resource-Response', 'true');
+    }
+    
+    /**
+     * Get original data from the response.
+     *
+     * @param  JsonResponse  $response
+     * @return array<string, mixed>
+     */
+    private function getOriginalData(JsonResponse $response): array
+    {
+        return json_decode($response->getContent(), true);
+    }
+    
+    /**
+     * Wrap data with standard format.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function wrapData(array $data): array
+    {
         $wrapped = [
             'success' => $this->success,
             'data' => $data,
         ];
         
-        // Add message if it exists
         if ($this->message !== null) {
             $wrapped['message'] = $this->message;
         }
         
-        // Get additional data using method from JsonResource
-        if (method_exists($this, 'resourceAdditional') && is_array($this->resourceAdditional())) {
+        if ($this->hasAdditionalData()) {
             $wrapped = array_merge($wrapped, $this->resourceAdditional());
         }
         
-        // Set the wrapped data as the response content
-        $response->setData($wrapped);
-        
-        // Add header to identify as a resource response
-        $response->header('X-Resource-Response', 'true');
+        return $wrapped;
+    }
+    
+    /**
+     * Check if resource has additional data.
+     *
+     * @return bool
+     */
+    private function hasAdditionalData(): bool
+    {
+        return method_exists($this, 'resourceAdditional') && is_array($this->resourceAdditional());
     }
 } 

@@ -30,8 +30,8 @@ class UserController extends Controller
                 'password' => 'required|string|min:6',
                 'role' => ['required', Rule::in(['client', 'lawyer', 'judge'])],
                 'city' => 'nullable|string|max:255',
-                'profile_pic' => 'nullable|string',
-                'phone' => 'nullable|string|max:20', // فقط للـ client و lawyer
+                'profile_image_url' => 'nullable|string',
+                'phone_number' => 'nullable|string|max:20', // فقط للـ client و lawyer
                 'specialization' => 'nullable|string|max:255', // فقط للقاضي
                 'court_name' => 'nullable|string|max:255',
                 'consult_fee' => 'nullable|numeric|min:0',
@@ -42,13 +42,13 @@ class UserController extends Controller
                 'email' => $validated['email'],
                 'password' => Hash::make($validated['password']),
                 'role' => $validated['role'],
-                'profile_pic' => $validated['profile_pic'] ?? null,
+                'profile_image_url' => $validated['profile_image_url'] ?? null,
             ]);
     
             if ($validated['role'] === 'client') {
                 Client::create([
                     'user_id' => $user->id,
-                    'phone' => $validated['phone'] ?? null,
+                    'phone_number' => $validated['phone_number'] ?? null,
                     'city' => $validated['city'] ?? null,
                 ]);
             }
@@ -56,7 +56,7 @@ class UserController extends Controller
             if ($validated['role'] === 'lawyer') {
                 Lawyer::create([
                     'user_id' => $user->id,
-                    'phone' => $validated['phone'] ?? null,
+                    'phone_number' => $validated['phone_number'] ?? null,
                     'specialization' => $validated['specialization'] ?? null,
                     'consult_fee' => $validated['consult_fee'] ?? null,
                     'city' => $validated['city'] ?? null,
@@ -110,7 +110,7 @@ class UserController extends Controller
             'password' => 'nullable|string|min:6',
             'role' => ['sometimes', Rule::in(['client', 'lawyer', 'judge'])],
             'city' => 'nullable|string|max:255',
-            'profile_pic' => 'nullable|string',
+            'profile_image_url' => 'nullable|string',
         ]);
 
         if (isset($validated['password'])) {

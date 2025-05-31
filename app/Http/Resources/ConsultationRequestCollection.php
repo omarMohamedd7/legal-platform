@@ -11,5 +11,5 @@ class ConsultationRequestCollection extends BaseResourceCollection
      *
      * @var string
      */
-    public $collects = ConsultationRequestResource::class;
+    public string $collects = ConsultationRequestResource::class;
 } 

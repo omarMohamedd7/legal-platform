@@ -18,6 +18,7 @@ use App\Http\Controllers\CaseAttachmentController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\JudgeTaskController;
+use App\Http\Controllers\ChatController;
 
 // Apply standard rate limiting to all API routes
 Route::middleware('throttle:standard')->group(function () {
@@ -32,7 +33,8 @@ Route::middleware('throttle:standard')->group(function () {
     
     // Password reset routes
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('/ me', [AuthController::class, 'resetPassword']);
+    Route::post('/ me
+    ', [AuthController::class, 'resetPassword']);
 
     // Legal Books Library routes (public)
     Route::get('/legal-books', [LegalBookController::class, 'index']);
@@ -119,12 +121,21 @@ Route::middleware('throttle:standard')->group(function () {
         Route::middleware('throttle:sensitive')->group(function () {
             Route::post('/consultations/request', [ConsultationController::class, 'requestConsultation']);
         });
+        Route::get('/consultations', [ConsultationController::class, 'index']);
+        Route::get('/consultations/{id}', [ConsultationController::class, 'show']);
         
         // Payment routes with stricter rate limiting
         Route::middleware('throttle:sensitive')->group(function () {
             Route::post('/payments', [PaymentController::class, 'createPayment']);
         });
         Route::get('/payments/{id}', [PaymentController::class, 'show']);
+        
+        // Chat routes
+        Route::get('/chats', [ChatController::class, 'index']);
+        Route::post('/chats/consultation', [ChatController::class, 'getOrCreateConsultationChat']);
+        Route::get('/chats/{id}/messages', [ChatController::class, 'getMessages']);
+        Route::post('/chats/{id}/messages', [ChatController::class, 'sendMessage']);
+        Route::post('/chats/{id}/close', [ChatController::class, 'closeChat']);
         
         // Judge Tasks routes
         Route::get('/judge/tasks', [JudgeTaskController::class, 'index']);

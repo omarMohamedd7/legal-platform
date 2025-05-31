@@ -1,0 +1,207 @@
+{
+  "examples": [
+    {
+      "name": "Request a consultation",
+      "endpoint": "POST /api/consultations/request",
+      "description": "Client requests a consultation with a lawyer",
+      "headers": {
+        "Authorization": "Bearer {client_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "request": {
+        "lawyer_id": 1
+      },
+      "response": {
+        "success": true,
+        "message": "Consultation request created successfully",
+        "data": {
+          "id": 1,
+          "client_id": 2,
+          "lawyer_id": 1,
+          "price": 150.00,
+          "status": "pending",
+          "created_at": "2023-06-15 14:30:00",
+          "updated_at": "2023-06-15 14:30:00",
+          "client": {
+            "id": 2,
+            "name": "John Doe",
+            "email": "client@example.com"
+          },
+          "lawyer": {
+            "id": 1,
+            "name": "Jane Smith",
+            "email": "lawyer@example.com"
+          }
+        }
+      }
+    },
+    {
+      "name": "Make payment for consultation",
+      "endpoint": "POST /api/payments",
+      "description": "Client pays for a consultation request",
+      "headers": {
+        "Authorization": "Bearer {client_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "request": {
+        "consultation_request_id": 1,
+        "payment_method": "credit_card",
+        "transaction_id": "tx_123456789"
+      },
+      "response": {
+        "success": true,
+        "message": "Payment processed successfully",
+        "data": {
+          "payment": {
+            "payment_id": 1,
+            "amount": 150.00,
+            "payment_method": "credit_card",
+            "status": "successful",
+            "created_at": "2023-06-15 14:35:00"
+          },
+          "consultation_request": {
+            "id": 1,
+            "status": "paid"
+          },
+          "chat": {
+            "id": 1,
+            "status": "active"
+          }
+        }
+      }
+    },
+    {
+      "name": "Access consultation chat",
+      "endpoint": "POST /api/chats/consultation",
+      "description": "Client or lawyer accesses the chat for a paid consultation",
+      "headers": {
+        "Authorization": "Bearer {user_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "request": {
+        "consultation_request_id": 1
+      },
+      "response": {
+        "success": true,
+        "message": "Chat session ready",
+        "data": {
+          "chat_id": 1,
+          "client": {
+            "id": 2,
+            "name": "John Doe"
+          },
+          "lawyer": {
+            "id": 1,
+            "name": "Jane Smith"
+          },
+          "consultation_request_id": 1,
+          "status": "active"
+        }
+      }
+    },
+    {
+      "name": "Get chat messages",
+      "endpoint": "GET /api/chats/1/messages",
+      "description": "Get all messages for a specific chat",
+      "headers": {
+        "Authorization": "Bearer {user_token}",
+        "Accept": "application/json"
+      },
+      "response": {
+        "success": true,
+        "data": [
+          {
+            "id": 1,
+            "sender": {
+              "id": 2,
+              "name": "John Doe"
+            },
+            "content": "Chat started for paid consultation",
+            "read_at": "2023-06-15 14:40:00",
+            "created_at": "2023-06-15 14:40:00"
+          },
+          {
+            "id": 2,
+            "sender": {
+              "id": 2,
+              "name": "John Doe"
+            },
+            "content": "Hello, I need legal advice about a contract issue.",
+            "read_at": null,
+            "created_at": "2023-06-15 14:41:00"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Send a chat message",
+      "endpoint": "POST /api/chats/1/messages",
+      "description": "Send a message in a chat",
+      "headers": {
+        "Authorization": "Bearer {user_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "request": {
+        "content": "Hello, I need legal advice about a contract issue."
+      },
+      "response": {
+        "success": true,
+        "message": "Message sent successfully",
+        "data": {
+          "id": 2,
+          "sender": {
+            "id": 2,
+            "name": "John Doe"
+          },
+          "content": "Hello, I need legal advice about a contract issue.",
+          "created_at": "2023-06-15 14:41:00"
+        }
+      }
+    },
+    {
+      "name": "Close a chat",
+      "endpoint": "POST /api/chats/1/close",
+      "description": "Close a chat session",
+      "headers": {
+        "Authorization": "Bearer {user_token}",
+        "Accept": "application/json"
+      },
+      "response": {
+        "success": true,
+        "message": "Chat closed successfully"
+      }
+    },
+    {
+      "name": "List all chats",
+      "endpoint": "GET /api/chats",
+      "description": "Get all chats for the authenticated user",
+      "headers": {
+        "Authorization": "Bearer {user_token}",
+        "Accept": "application/json"
+      },
+      "response": {
+        "success": true,
+        "data": [
+          {
+            "id": 1,
+            "client": {
+              "id": 2,
+              "name": "John Doe"
+            },
+            "lawyer": {
+              "id": 1,
+              "name": "Jane Smith"
+            },
+            "status": "active",
+            "last_message_at": "2023-06-15 14:41:00",
+            "created_at": "2023-06-15 14:40:00"
+          }
+        ]
+      }
+    }
+  ]
+} 

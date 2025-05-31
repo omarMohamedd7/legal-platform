@@ -4,143 +4,374 @@ namespace App\Http\Controllers;
 
 use App\Models\CaseRequest;
 use App\Models\LegalCase;
+use App\Models\CaseAttachment;
+use App\Models\Lawyer;
+use App\Models\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class CaseRequestController extends Controller
 {
-    // إنشاء طلب توكيل جديد
+    /**
+     * Create a direct case request from a client to a specific lawyer
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function store(Request $request)
     {
-        $case = LegalCase::create([
-            'case_number' => $request->case_number,
-            'case_type' => $request->case_type,
-            'plaintiff_name' => $request->plaintiff_name,
-            'defendant_name' => $request->defendant_name,
-            'description' => $request->description,
-            'status' => 'Pending', // الحالة مبدئياً معلقة
-            'created_by_id' => Auth::id(),
-            'assigned_lawyer_id' => $request->lawyer_id,
-        ]);
-        
-        // ثم إنشاء طلب التوكيل وربطه بالقضية
-        $caseRequest = CaseRequest::create([
-            'client_id' => Auth::id(),
-            'lawyer_id' => $request->lawyer_id,
-            'details' => $request->details,
-            'case_id' => $case->case_id,
-            'status' => 'Pending',
-        ]);
-        
-        return response()->json([
-            'message' => 'Case request created successfully.',
-            'request' => $caseRequest,
-            'case' => $case
-        ], 201);
+        try {
+            $user = Auth::user();
+            
+            if (!$user || $user->role !== 'client') {
+                return response()->json(['message' => 'غير مصرح. يمكن للعملاء فقط إنشاء طلبات قضايا.'], 403);
+            }
+            
+            $client = $user->client;
+            
+            if (!$client) {
+                return response()->json(['message' => 'لم يتم العثور على ملف العميل.'], 404);
+            }
+            
+            // Get the lawyer
+            $lawyer = Lawyer::findOrFail($request->lawyer_id);
+            
+            // Validate input
+            $validated = $request->validate([
+                'lawyer_id' => 'required|exists:lawyers,lawyer_id',
+                'case_number' => 'nullable|string',
+                'plaintiff_name' => 'nullable|string|max:255',
+                'defendant_name' => 'nullable|string|max:255',
+                'description' => 'required|string',
+                'attachments' => 'nullable|array',
+                'attachments.*' => 'file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240',
+            ]);
+            
+            // Generate a case number if not provided
+            $caseNumber = $validated['case_number'] ?? 'CASE-' . time() . '-' . rand(1000, 9999);
+            
+            // Handle attachments if provided
+            $attachments = [];
+            if ($request->hasFile('attachments')) {
+                foreach ($request->file('attachments') as $file) {
+                    $path = $file->store('case_attachments', 'public');
+                    
+                    $attachments[] = [
+                        'path' => $path,
+                        'type' => $file->getClientMimeType(),
+                        'name' => $file->getClientOriginalName(),
+                        'uploaded_by' => $user->id,
+                        'uploaded_at' => now()->toIso8601String(),
+                    ];
+                }
+            }
+            
+            // Create the legal case with lawyer's specialization as case_type
+            $legalCase = LegalCase::create([
+                'case_number' => $caseNumber,
+                'case_type' => $lawyer->specialization,
+                'plaintiff_name' => $validated['plaintiff_name'] ?? null,
+                'defendant_name' => $validated['defendant_name'] ?? null,
+                'description' => $validated['description'],
+                'status' => 'Pending', // Initial status is pending until lawyer accepts
+                'attachments' => !empty($attachments) ? $attachments : null,
+                'created_by_id' => $user->id,
+                'assigned_lawyer_id' => $lawyer->lawyer_id,
+            ]);
+            
+            // Create the case request
+            $caseRequest = CaseRequest::create([
+                'client_id' => $client->client_id,
+                'lawyer_id' => $lawyer->lawyer_id,
+                'case_id' => $legalCase->case_id,
+                'attachments' => !empty($attachments) ? $attachments : null,
+                'status' => 'Pending',
+            ]);
+            
+            return response()->json([
+                'message' => 'تم إنشاء طلب القضية بنجاح.',
+                'request' => [
+                    'request_id' => $caseRequest->request_id,
+                    'status' => $caseRequest->status,
+                    'created_at' => $caseRequest->created_at,
+                    'attachments' => $caseRequest->attachments,
+                ],
+                'case' => [
+                    'case_id' => $legalCase->case_id,
+                    'case_number' => $legalCase->case_number,
+                    'case_type' => $legalCase->case_type,
+                    'plaintiff_name' => $legalCase->plaintiff_name,
+                    'defendant_name' => $legalCase->defendant_name,
+                    'description' => $legalCase->description,
+                    'status' => $legalCase->status,
+                    'attachments' => $legalCase->attachments,
+                ],
+                'lawyer' => [
+                    'lawyer_id' => $lawyer->lawyer_id,
+                    'name' => $lawyer->user->name,
+                    'specialization' => $lawyer->specialization,
+                ],
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Error creating case request: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'حدث خطأ أثناء إنشاء طلب القضية.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
-    // محامي يوافق على الطلب
+    /**
+     * Accept a case request (lawyer endpoint)
+     * 
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function accept($id)
     {
-        $caseRequest = CaseRequest::findOrFail($id);
-    
-        $user = Auth::user();
-        if (!$user || $user->role !== 'lawyer' || $user->id !== $caseRequest->lawyer->user_id) {
-            return response()->json(['message' => 'Unauthorized. Only the assigned lawyer can accept.'], 403);
-        }
-    
-        if ($caseRequest->status !== 'Pending') {
+        try {
+            $user = Auth::user();
+            
+            if (!$user || $user->role !== 'lawyer') {
+                return response()->json(['message' => 'غير مصرح. يمكن للمحامين فقط قبول الطلبات.'], 403);
+            }
+            
+            $lawyer = $user->lawyer;
+            
+            if (!$lawyer) {
+                return response()->json(['message' => 'لم يتم العثور على ملف المحامي.'], 404);
+            }
+            
+            $caseRequest = CaseRequest::with('case')->findOrFail($id);
+            
+            // Verify that this request belongs to the authenticated lawyer
+            if ($caseRequest->lawyer_id !== $lawyer->lawyer_id) {
+                return response()->json(['message' => 'غير مصرح. يمكنك فقط قبول الطلبات الموجهة إليك.'], 403);
+            }
+            
+            // Verify the request is still pending
+            if ($caseRequest->status !== 'Pending') {
+                return response()->json([
+                    'message' => 'لا يمكن قبول هذا الطلب. يمكن قبول الطلبات المعلقة فقط.',
+                    'current_status' => $caseRequest->status
+                ], 400);
+            }
+            
+            // Update the request status
+            $caseRequest->status = 'Accepted';
+            $caseRequest->save();
+            
+            // Update the associated case status
+            if ($caseRequest->case) {
+                $caseRequest->case->status = 'Active';
+                $caseRequest->case->save();
+            }
+            
             return response()->json([
-                'message' => 'Cannot accept this request. Only pending requests can be accepted.',
-                'current_status' => $caseRequest->status
-            ], 400);
+                'message' => 'تم قبول طلب القضية وتنشيط القضية.',
+                'request' => [
+                    'request_id' => $caseRequest->request_id,
+                    'status' => $caseRequest->status,
+                    'updated_at' => $caseRequest->updated_at,
+                ],
+                'case' => [
+                    'case_id' => $caseRequest->case->case_id,
+                    'status' => $caseRequest->case->status,
+                    'updated_at' => $caseRequest->case->updated_at,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error accepting case request: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'حدث خطأ أثناء قبول طلب القضية.',
+                'error' => $e->getMessage()
+            ], 500);
         }
-    
-        $caseRequest->status = 'Accepted';
-        $caseRequest->save();
-    
-        // تفعيل القضية المرتبطة
-        if ($caseRequest->case) {
-            $caseRequest->case->status = 'Active';
-            $caseRequest->case->save();
-        }
-    
-        return response()->json(['message' => 'Case request accepted and case activated.']);
     }
 
-    // محامي يرفض الطلب
+    /**
+     * Reject a case request (lawyer endpoint)
+     * 
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function reject($id)
     {
-        $caseRequest = CaseRequest::findOrFail($id);
-
-        $user = Auth::user();
-        if (!$user || $user->role !== 'lawyer' || $user->id !== $caseRequest->lawyer->user_id) {
-            return response()->json(['message' => 'Unauthorized. Only the assigned lawyer can reject.'], 403);
-        }
-
-        // التحقق من أن الطلب في حالة انتظار فقط
-        if ($caseRequest->status !== 'Pending') {
+        try {
+            $user = Auth::user();
+            
+            if (!$user || $user->role !== 'lawyer') {
+                return response()->json(['message' => 'غير مصرح. يمكن للمحامين فقط رفض الطلبات.'], 403);
+            }
+            
+            $lawyer = $user->lawyer;
+            
+            if (!$lawyer) {
+                return response()->json(['message' => 'لم يتم العثور على ملف المحامي.'], 404);
+            }
+            
+            $caseRequest = CaseRequest::findOrFail($id);
+            
+            // Verify that this request belongs to the authenticated lawyer
+            if ($caseRequest->lawyer_id !== $lawyer->lawyer_id) {
+                return response()->json(['message' => 'غير مصرح. يمكنك فقط رفض الطلبات الموجهة إليك.'], 403);
+            }
+            
+            // Verify the request is still pending
+            if ($caseRequest->status !== 'Pending') {
+                return response()->json([
+                    'message' => 'لا يمكن رفض هذا الطلب. يمكن رفض الطلبات المعلقة فقط.',
+                    'current_status' => $caseRequest->status
+                ], 400);
+            }
+            
+            // Update the request status
+            $caseRequest->status = 'Rejected';
+            $caseRequest->save();
+            
             return response()->json([
-                'message' => 'Cannot reject this request. Only pending requests can be rejected.',
-                'current_status' => $caseRequest->status
-            ], 400);
+                'message' => 'تم رفض طلب القضية.',
+                'request' => [
+                    'request_id' => $caseRequest->request_id,
+                    'status' => $caseRequest->status,
+                    'updated_at' => $caseRequest->updated_at,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error rejecting case request: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'حدث خطأ أثناء رفض طلب القضية.',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $caseRequest->status = 'Rejected';
-        $caseRequest->save();
-
-        return response()->json(['message' => 'Case request rejected.']);
     }
 
+    /**
+     * Get all case requests for the authenticated client
+     * 
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function getClientRequests()
     {
-        $user = Auth::user();
-
-        if (!$user || $user->role !== 'client') {
-            return response()->json(['message' => 'Unauthorized. Only clients can view their requests.'], 403);
-        }
-
-        $client = $user->client;
-
-        if (!$client) {
+        try {
+            $user = Auth::user();
+            
+            if (!$user || $user->role !== 'client') {
+                return response()->json(['message' => 'غير مصرح. يمكن للعملاء فقط عرض طلباتهم.'], 403);
+            }
+            
+            $client = $user->client;
+            
+            if (!$client) {
+                return response()->json(['message' => 'لم يتم العثور على ملف العميل.'], 404);
+            }
+            
+            $requests = CaseRequest::with(['lawyer.user', 'case'])
+                ->where('client_id', $client->client_id)
+                ->orderBy('created_at', 'desc')
+                ->paginate(10);
+            
+            // Format the response
+            $formattedRequests = $requests->map(function($request) {
+                return [
+                    'request_id' => $request->request_id,
+                    'status' => $request->status,
+                    'created_at' => $request->created_at,
+                    'case' => $request->case ? [
+                        'case_id' => $request->case->case_id,
+                        'case_number' => $request->case->case_number,
+                        'case_type' => $request->case->case_type,
+                        'plaintiff_name' => $request->case->plaintiff_name,
+                        'defendant_name' => $request->case->defendant_name,
+                        'description' => $request->case->description,
+                        'status' => $request->case->status,
+                    ] : null,
+                    'lawyer' => $request->lawyer ? [
+                        'lawyer_id' => $request->lawyer->lawyer_id,
+                        'name' => $request->lawyer->user->name,
+                        'specialization' => $request->lawyer->specialization,
+                    ] : null,
+                ];
+            });
+            
             return response()->json([
-                'message' => 'Client profile not found.',
-                'user_id' => $user->id,
-                'role' => $user->role
-            ], 404);
+                'data' => $formattedRequests,
+                'current_page' => $requests->currentPage(),
+                'last_page' => $requests->lastPage(),
+                'per_page' => $requests->perPage(),
+                'total' => $requests->total(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error retrieving client requests: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'حدث خطأ أثناء جلب طلبات العميل.',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $requests = CaseRequest::with(['lawyer.user', 'case'])
-            ->where('client_id', $client->client_id)
-            ->orderBy('created_at', 'desc')
-            ->paginate(10);
-
-        return response()->json($requests);
     }
 
+    /**
+     * Get all case requests for the authenticated lawyer
+     * 
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function getLawyerRequests()
     {
-        $user = Auth::user();
-
-        if (!$user || $user->role !== 'lawyer') {
-            return response()->json(['message' => 'Unauthorized. Only lawyers can view their requests.'], 403);
-        }
-
-        $lawyer = $user->lawyer;
-
-        if (!$lawyer) {
+        try {
+            $user = Auth::user();
+            
+            if (!$user || $user->role !== 'lawyer') {
+                return response()->json(['message' => 'غير مصرح. يمكن للمحامين فقط عرض طلباتهم.'], 403);
+            }
+            
+            $lawyer = $user->lawyer;
+            
+            if (!$lawyer) {
+                return response()->json(['message' => 'لم يتم العثور على ملف المحامي.'], 404);
+            }
+            
+            $requests = CaseRequest::with(['client.user', 'case'])
+                ->where('lawyer_id', $lawyer->lawyer_id)
+                ->orderBy('created_at', 'desc')
+                ->paginate(10);
+            
+            // Format the response
+            $formattedRequests = $requests->map(function($request) {
+                return [
+                    'request_id' => $request->request_id,
+                    'status' => $request->status,
+                    'created_at' => $request->created_at,
+                    'case' => $request->case ? [
+                        'case_id' => $request->case->case_id,
+                        'case_number' => $request->case->case_number,
+                        'case_type' => $request->case->case_type,
+                        'plaintiff_name' => $request->case->plaintiff_name,
+                        'defendant_name' => $request->case->defendant_name,
+                        'description' => $request->case->description,
+                        'status' => $request->case->status,
+                    ] : null,
+                    'client' => $request->client ? [
+                        'client_id' => $request->client->client_id,
+                        'name' => $request->client->user->name,
+                    ] : null,
+                ];
+            });
+            
             return response()->json([
-                'message' => 'Lawyer profile not found.',
-                'user_id' => $user->id,
-                'role' => $user->role
-            ], 404);
+                'data' => $formattedRequests,
+                'current_page' => $requests->currentPage(),
+                'last_page' => $requests->lastPage(),
+                'per_page' => $requests->perPage(),
+                'total' => $requests->total(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error retrieving lawyer requests: ' . $e->getMessage());
+            return response()->json([
+                'message' => 'حدث خطأ أثناء جلب طلبات المحامي.',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $requests = CaseRequest::with(['client.user', 'case'])
-            ->where('lawyer_id', $lawyer->lawyer_id)
-            ->orderBy('created_at', 'desc')
-            ->paginate(10);
-
-        return response()->json($requests);
     }
 }

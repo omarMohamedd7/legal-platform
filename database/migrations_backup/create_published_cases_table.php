@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('case_id')->constrained('cases', 'case_id')->onDelete('cascade');
             $table->foreignId('client_id')->constrained('clients', 'client_id')->onDelete('cascade');
             $table->enum('status', ['Active', 'Closed'])->default('Active');
-            $table->string('target_city')->nullable();
+            $table->string('target_city');
             $table->enum('target_specialization', ['Family Law', 'Civil Law', 'Criminal Law', 'Commercial Law', 'International Law']);
             $table->timestamps();
         });

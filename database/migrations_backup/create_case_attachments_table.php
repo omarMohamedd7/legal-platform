@@ -19,10 +19,7 @@ return new class extends Migration
             $table->string('original_filename');
             $table->timestamps();
             
-            $table->foreign('case_id')
-                  ->references('case_id')
-                  ->on('cases')
-                  ->onDelete('cascade');
+            $table->foreign('case_id')->references('case_id')->on('cases')->onDelete('cascade');
         });
     }
 

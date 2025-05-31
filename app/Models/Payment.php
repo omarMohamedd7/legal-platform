@@ -20,7 +20,7 @@ class Payment extends Model
     ];
 
     /**
-     * Get the consultation request that the payment belongs to.
+     * Get the consultation request that owns the payment.
      */
     public function consultationRequest()
     {

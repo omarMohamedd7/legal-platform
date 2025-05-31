@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Chat;
 use App\Models\ConsultationRequest;
 use App\Models\Payment;
 use App\Models\Lawyer;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -16,15 +18,15 @@ class PaymentController extends Controller
     /**
      * Create a new payment for a consultation request.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
+     * @param  Request  $request
+     * @return JsonResponse
      */
-    public function createPayment(Request $request)
+    public function createPayment(Request $request): JsonResponse
     {
         // Ensure user is authenticated
         $user = Auth::user();
         if (!$user) {
-            return response()->json(['message' => 'Unauthorized'], 401);
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
         }
 
         // Validate the request
@@ -49,14 +51,16 @@ class PaymentController extends Controller
             if ($consultationRequest->client_id !== $user->id) {
                 DB::rollBack();
                 return response()->json([
+                    'success' => false,
                     'message' => 'You can only make payments for your own consultation requests'
                 ], 403);
             }
             
             // Check if the consultation request is already paid
-            if ($consultationRequest->status === 'paid') {
+            if ($consultationRequest->status === ConsultationRequest::STATUS_PAID) {
                 DB::rollBack();
                 return response()->json([
+                    'success' => false,
                     'message' => 'This consultation request has already been paid'
                 ], 422);
             }
@@ -65,6 +69,7 @@ class PaymentController extends Controller
             if ($consultationRequest->payment) {
                 DB::rollBack();
                 return response()->json([
+                    'success' => false,
                     'message' => 'A payment already exists for this consultation request'
                 ], 422);
             }
@@ -79,23 +84,40 @@ class PaymentController extends Controller
             ]);
             
             // Update the consultation request status to paid
-            $consultationRequest->status = 'paid';
+            $consultationRequest->status = ConsultationRequest::STATUS_PAID;
             $consultationRequest->save();
             
-            // Here you would typically activate the chat between client and lawyer
-            // This is just a placeholder for that logic
+            // Create a chat session for the consultation
+            $chat = $this->createChatSession($consultationRequest);
             
             DB::commit();
             
             return response()->json([
+                'success' => true,
                 'message' => 'Payment processed successfully',
-                'payment' => $payment,
-                'consultation_request' => $consultationRequest,
+                'data' => [
+                    'payment' => [
+                        'payment_id' => $payment->payment_id,
+                        'amount' => $payment->amount,
+                        'payment_method' => $payment->payment_method,
+                        'status' => $payment->status,
+                        'created_at' => $payment->created_at->format('Y-m-d H:i:s'),
+                    ],
+                    'consultation_request' => [
+                        'id' => $consultationRequest->id,
+                        'status' => $consultationRequest->status,
+                    ],
+                    'chat' => [
+                        'id' => $chat->id,
+                        'status' => $chat->status,
+                    ],
+                ],
             ], 201);
             
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json([
+                'success' => false,
                 'message' => 'Failed to process payment',
                 'error' => $e->getMessage(),
             ], 500);
@@ -106,22 +128,72 @@ class PaymentController extends Controller
      * Get payment details.
      *
      * @param  int  $id
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse
      */
-    public function show($id)
+    public function show($id): JsonResponse
     {
         $payment = Payment::with('consultationRequest')->findOrFail($id);
         
         // Ensure the authenticated user is authorized to view this payment
         $user = Auth::user();
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+        
         $consultationRequest = $payment->consultationRequest;
         
         if ($user->id !== $consultationRequest->client_id && 
             $user->id !== $consultationRequest->lawyer_id && 
             $user->role !== 'admin') {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
         
-        return response()->json($payment);
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'payment_id' => $payment->payment_id,
+                'consultation_request_id' => $payment->consultation_request_id,
+                'amount' => $payment->amount,
+                'payment_method' => $payment->payment_method,
+                'status' => $payment->status,
+                'transaction_id' => $payment->transaction_id,
+                'created_at' => $payment->created_at->format('Y-m-d H:i:s'),
+                'updated_at' => $payment->updated_at->format('Y-m-d H:i:s'),
+            ],
+        ]);
+    }
+    
+    /**
+     * Create a chat session for a paid consultation.
+     *
+     * @param ConsultationRequest $consultationRequest
+     * @return Chat
+     */
+    private function createChatSession(ConsultationRequest $consultationRequest): Chat
+    {
+        // Load the client and lawyer relationships if not already loaded
+        if (!$consultationRequest->relationLoaded('client')) {
+            $consultationRequest->load('client');
+        }
+        
+        if (!$consultationRequest->relationLoaded('lawyer')) {
+            $consultationRequest->load('lawyer');
+        }
+        
+        // Get the user IDs from the client and lawyer models
+        $clientUserId = $consultationRequest->client->user_id;
+        $lawyerUserId = $consultationRequest->lawyer->user_id;
+        
+        return Chat::firstOrCreate(
+            [
+                'client_id' => $clientUserId,
+                'lawyer_id' => $lawyerUserId,
+                'consultation_request_id' => $consultationRequest->id,
+            ],
+            [
+                'status' => Chat::STATUS_ACTIVE,
+                'last_message_at' => now(),
+            ]
+        );
     }
 } 

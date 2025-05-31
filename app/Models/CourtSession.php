@@ -9,14 +9,28 @@ class CourtSession extends Model
 {
     use HasFactory;
 
+    protected $primaryKey = 'session_id';
+
     protected $fillable = [
         'legal_case_id',
-        'lawyer_id',
-        'court_name',
         'session_date',
         'session_time',
-        'notes',
-        'status',
+        'court_name',
+        'judge_name',
+        'session_notes',
+        'attachments',
+        'session_status',
+        'added_by_id',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'session_date' => 'date',
+        'attachments' => 'array',
     ];
 
     /**
@@ -33,5 +47,13 @@ class CourtSession extends Model
     public function lawyer()
     {
         return $this->belongsTo(Lawyer::class, 'lawyer_id', 'lawyer_id');
+    }
+
+    /**
+     * Get the user who added the court session.
+     */
+    public function addedBy()
+    {
+        return $this->belongsTo(User::class, 'added_by_id');
     }
 } 

@@ -14,13 +14,13 @@ class CaseOffer extends Model
     protected $fillable = [
         'published_case_id',
         'lawyer_id',
-        'price',
-        'description',
+        'message',
+        'expected_price',
         'status', // Pending, Accepted, Rejected
     ];
     
     protected $casts = [
-        'price' => 'decimal:2',
+        'expected_price' => 'decimal:2',
     ];
     
     // علاقة مع القضية المنشورة

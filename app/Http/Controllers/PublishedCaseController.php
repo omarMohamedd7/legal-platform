@@ -32,32 +32,30 @@ class PublishedCaseController extends Controller
             
             // التحقق من البيانات المدخلة
             $validated = $request->validate([
-                'case_number' => 'required|string|unique:cases,case_number',
-                'plaintiff_name' => 'nullable|string|max:255',
-                'defendant_name' => 'nullable|string|max:255',
-                'description' => 'nullable|string',
-                'target_city' => 'nullable|string',
-                'target_specialization' => 'required|in:Family Law,Criminal Law,Civil Law,Commercial Law,International Law',
+                'case_type' => 'required|in:Family Law,Criminal Law,Civil Law,Commercial Law,International Law',
+                'description' => 'required|string',
+                'target_city' => 'required|string',
             ]);
             
-            // إنشاء القضية الأساسية أولاً - use target_specialization for case_type
+            // Auto-generate a unique case number
+            $caseNumber = 'CASE-' . time() . '-' . rand(1000, 9999);
+            
+            // إنشاء القضية الأساسية أولاً
             $legalCase = LegalCase::create([
-                'case_number' => $validated['case_number'],
-                'plaintiff_name' => $validated['plaintiff_name'] ?? null,
-                'defendant_name' => $validated['defendant_name'] ?? null,
-                'case_type' => $validated['target_specialization'], // Set case_type to match target_specialization
-                'description' => $validated['description'] ?? null,
+                'case_number' => $caseNumber,
+                'case_type' => $validated['case_type'],
+                'description' => $validated['description'],
                 'status' => 'Pending', // حالة معلقة حتى يتم قبول عرض
                 'created_by_id' => $user->id,
             ]);
             
-            // ثم إنشاء قضية منشورة مرتبطة بها - بدون تكرار البيانات
+            // ثم إنشاء قضية منشورة مرتبطة بها
             $publishedCase = PublishedCase::create([
                 'case_id' => $legalCase->case_id,
                 'client_id' => $client->client_id,
                 'status' => 'Active', // حالة نشطة لاستقبال العروض
-                'target_city' => $validated['target_city'] ?? null,
-                'target_specialization' => $validated['target_specialization'],
+                'target_city' => $validated['target_city'],
+                'target_specialization' => $validated['case_type'], // Set target_specialization to match case_type
             ]);
             
             // Load the legal case relationship for the response
@@ -74,8 +72,6 @@ class PublishedCaseController extends Controller
                     'case' => [
                         'case_id' => $legalCase->case_id,
                         'case_number' => $legalCase->case_number,
-                        'plaintiff_name' => $legalCase->plaintiff_name,
-                        'defendant_name' => $legalCase->defendant_name,
                         'case_type' => $legalCase->case_type,
                         'description' => $legalCase->description,
                         'status' => $legalCase->status,
@@ -115,10 +111,11 @@ class PublishedCaseController extends Controller
             }
             
             // الحصول على القضايا المنشورة المناسبة لتخصص وموقع المحامي
-            // Only get cases that match lawyer's specialization and city exactly
+            // Only get cases that match lawyer's specialization AND city
             $publishedCases = PublishedCase::with(['legalCase', 'client.user'])
                 ->where('status', 'Active')
                 ->where('target_specialization', $lawyer->specialization)
+                ->where('target_city', $lawyer->city) // Filter by lawyer's city
                 ->orderBy('created_at', 'desc')
                 ->paginate(15);
             
@@ -133,8 +130,6 @@ class PublishedCaseController extends Controller
                     'case' => $publishedCase->legalCase ? [
                         'case_id' => $publishedCase->legalCase->case_id,
                         'case_number' => $publishedCase->legalCase->case_number,
-                        'plaintiff_name' => $publishedCase->legalCase->plaintiff_name,
-                        'defendant_name' => $publishedCase->legalCase->defendant_name,
                         'case_type' => $publishedCase->legalCase->case_type,
                         'description' => $publishedCase->legalCase->description,
                         'status' => $publishedCase->legalCase->status,
@@ -204,8 +199,6 @@ class PublishedCaseController extends Controller
                     'case' => $publishedCase->legalCase ? [
                         'case_id' => $publishedCase->legalCase->case_id,
                         'case_number' => $publishedCase->legalCase->case_number,
-                        'plaintiff_name' => $publishedCase->legalCase->plaintiff_name,
-                        'defendant_name' => $publishedCase->legalCase->defendant_name,
                         'case_type' => $publishedCase->legalCase->case_type,
                         'description' => $publishedCase->legalCase->description,
                         'status' => $publishedCase->legalCase->status,
@@ -270,7 +263,10 @@ class PublishedCaseController extends Controller
                     return response()->json(['message' => 'غير مصرح. هذه القضية لا تناسب تخصصك.'], 403);
                 }
                 
-              
+                // Check if city matches - lawyers can only view cases in their city
+                if ($publishedCase->target_city !== $lawyer->city) {
+                    return response()->json(['message' => 'غير مصرح. هذه القضية لمحامين في مدينة أخرى.'], 403);
+                }
             }
             // إذا كان العميل، تأكد أنه صاحب القضية
             else if ($user->role === 'client' && $user->client->client_id !== $publishedCase->client_id) {
@@ -287,8 +283,6 @@ class PublishedCaseController extends Controller
                 'case' => $publishedCase->legalCase ? [
                     'case_id' => $publishedCase->legalCase->case_id,
                     'case_number' => $publishedCase->legalCase->case_number,
-                    'plaintiff_name' => $publishedCase->legalCase->plaintiff_name,
-                    'defendant_name' => $publishedCase->legalCase->defendant_name,
                     'case_type' => $publishedCase->legalCase->case_type,
                     'description' => $publishedCase->legalCase->description,
                     'status' => $publishedCase->legalCase->status,

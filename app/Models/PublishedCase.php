@@ -35,8 +35,6 @@ class PublishedCase extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'publish_end_date' => 'datetime',
-        'is_featured' => 'boolean',
     ];
     
     /**

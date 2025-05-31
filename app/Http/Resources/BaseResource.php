@@ -9,28 +9,39 @@ abstract class BaseResource extends JsonResource
 {
     use BaseJsonResourceWrapping;
 
-    protected $message;
-    protected $success = true;
+    /**
+     * Custom message for the response.
+     *
+     * @var string|null
+     */
+    protected ?string $message = null;
+    
+    /**
+     * Success status for the response.
+     *
+     * @var bool
+     */
+    protected bool $success = true;
 
     /**
-     * Set a custom message for the response
+     * Set a custom message for the response.
      *
      * @param string $message
      * @return $this
      */
-    public function withMessage(string $message)
+    public function withMessage(string $message): self
     {
         $this->message = $message;
         return $this;
     }
 
     /**
-     * Set success status for the response
+     * Set success status for the response.
      *
      * @param bool $success
      * @return $this
      */
-    public function withSuccess(bool $success)
+    public function withSuccess(bool $success): self
     {
         $this->success = $success;
         return $this;
@@ -39,9 +50,9 @@ abstract class BaseResource extends JsonResource
     /**
      * Store the resource additional data for use in the wrapper.
      *
-     * @return array
+     * @return array<string, mixed>
      */
-    public function resourceAdditional()
+    public function resourceAdditional(): array
     {
         return $this->additional;
     }
@@ -49,7 +60,7 @@ abstract class BaseResource extends JsonResource
     /**
      * Transform the resource into an array.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param  Request  $request
      * @return array<string, mixed>
      */
     public function toArray(Request $request): array
@@ -60,8 +71,8 @@ abstract class BaseResource extends JsonResource
     /**
      * Get the resource specific data.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return array
+     * @param  Request  $request
+     * @return array<string, mixed>
      */
     abstract public function getResourceData(Request $request): array;
 } 

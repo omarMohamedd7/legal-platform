@@ -39,7 +39,7 @@ class JudgeTask extends Model
      */
     public function judge()
     {
-        return $this->belongsTo(User::class, 'judge_id');
+        return $this->belongsTo(Judge::class, 'judge_id', 'judge_id');
     }
 
     /**

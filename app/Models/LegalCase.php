@@ -16,9 +16,19 @@ class LegalCase extends Model
         'case_type',
         'description',
         'status',
+        'attachments',
         'created_by_id',
         'assigned_lawyer_id',
         'case_publish_id',      
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'attachments' => 'array',
     ];
 
     public function createdBy()
@@ -52,11 +62,5 @@ class LegalCase extends Model
     public function courtSessions()
     {
         return $this->hasMany(CourtSession::class, 'legal_case_id', 'case_id');
-    }
-    
-    // علاقة مع مرفقات القضية
-    public function attachments()
-    {
-        return $this->hasMany(CaseAttachment::class, 'case_id', 'case_id');
     }
 }

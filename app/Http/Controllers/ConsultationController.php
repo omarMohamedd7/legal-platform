@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\ConsultationRequest;
 use App\Models\Lawyer;
 use App\Models\User;
+use App\Models\Client;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
@@ -16,29 +18,33 @@ class ConsultationController extends Controller
     /**
      * Get all consultation requests for the authenticated user.
      *
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse|ConsultationRequestCollection
      */
     public function index()
     {
         $user = Auth::user();
         if (!$user) {
-            return response()->json([
-                'success' => false, 
-                'message' => 'Unauthorized'
-            ], 401);
+            return $this->unauthorizedResponse();
         }
 
+        if (!in_array($user->role, ['client', 'lawyer'])) {
+            return $this->forbiddenResponse('Only clients and lawyers can view consultations');
+        }
+        
         $query = ConsultationRequest::query();
         
         if ($user->role === 'client') {
-            $query->where('client_id', $user->id);
-        } elseif ($user->role === 'lawyer') {
-            $query->where('lawyer_id', $user->id);
+            $client = Client::where('user_id', $user->id)->first();
+            if (!$client) {
+                return $this->notFoundResponse('Client profile not found');
+            }
+            $query->where('client_id', $client->client_id);
         } else {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only clients and lawyers can view consultations'
-            ], 403);
+            $lawyer = Lawyer::where('user_id', $user->id)->first();
+            if (!$lawyer) {
+                return $this->notFoundResponse('Lawyer profile not found');
+            }
+            $query->where('lawyer_id', $lawyer->lawyer_id);
         }
         
         $consultations = $query->with(['client', 'lawyer'])->paginate(10);
@@ -49,86 +55,64 @@ class ConsultationController extends Controller
     /**
      * Request a legal consultation with a lawyer.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
+     * @param  Request  $request
+     * @return JsonResponse|ConsultationRequestResource
      */
     public function requestConsultation(Request $request)
     {
-        // Ensure the authenticated user is a client
         $user = Auth::user();
         if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized'
-            ], 401);
+            return $this->unauthorizedResponse();
         }
 
         if ($user->role !== 'client') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only clients can request consultations'
-            ], 403);
-        }
-
-        // Validate the request - now expecting lawyer_id from the lawyers table
-        $validated = $request->validate([
-            'lawyer_id' => 'required|exists:lawyers,lawyer_id',
-        ]);
-
-        // Get the lawyer profile directly using the lawyer_id
-        $lawyerProfile = Lawyer::find($validated['lawyer_id']);
-        if (!$lawyerProfile) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Lawyer profile not found'
-            ], 404);
-        }
-        
-        // Get the lawyer's user record
-        $lawyer = User::find($lawyerProfile->user_id);
-        if (!$lawyer || $lawyer->role !== 'lawyer') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Lawyer user account not found'
-            ], 404);
-        }
-
-        // Prevent clients from requesting consultations from themselves
-        if ($user->id === $lawyer->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You cannot request a consultation with yourself'
-            ], 422);
-        }
-
-        // Check if the consultation fee is set
-        if ($lawyerProfile->consult_fee === null) {
-            return response()->json([
-                'success' => false,
-                'message' => 'This lawyer has not set a consultation fee'
-            ], 422);
+            return $this->forbiddenResponse('Only clients can request consultations');
         }
 
         try {
-            // Create the consultation request
-            $consultationRequest = ConsultationRequest::create([
-                'client_id' => $user->id,
-                'lawyer_id' => $lawyer->id, // Using the User ID of the lawyer
-                'price' => $lawyerProfile->consult_fee,
-                'status' => 'pending',
+            $validated = $request->validate([
+                'lawyer_id' => 'required|exists:lawyers,lawyer_id',
             ]);
 
+            // Get the client record for the authenticated user
+            $client = Client::where('user_id', $user->id)->first();
+            if (!$client) {
+                return $this->notFoundResponse('Client profile not found');
+            }
+
+            $lawyerProfile = Lawyer::find($validated['lawyer_id']);
+            if (!$lawyerProfile) {
+                return $this->notFoundResponse('Lawyer profile not found');
+            }
+            
+            $lawyer = User::find($lawyerProfile->user_id);
+            if (!$lawyer || $lawyer->role !== 'lawyer') {
+                return $this->notFoundResponse('Lawyer user account not found');
+            }
+
+            if ($user->id === $lawyer->id) {
+                return $this->validationErrorResponse('You cannot request a consultation with yourself');
+            }
+
+            if ($lawyerProfile->consult_fee === null) {
+                return $this->validationErrorResponse('This lawyer has not set a consultation fee');
+            }
+
+            // Use client_id from the Client model
+            $consultationRequest = $this->createConsultationRequest($client->client_id, $lawyerProfile->lawyer_id, $lawyerProfile->consult_fee);
             $consultationRequest->load('client', 'lawyer');
 
             return (new ConsultationRequestResource($consultationRequest))
                 ->withMessage('Consultation request created successfully');
                 
-        } catch (\Exception $e) {
+        } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to create consultation request',
-                'error' => $e->getMessage(),
-            ], 500);
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return $this->serverErrorResponse('Failed to create consultation request', $e->getMessage());
         }
     }
     
@@ -136,33 +120,141 @@ class ConsultationController extends Controller
      * Show a specific consultation request.
      *
      * @param int $id
-     * @return \Illuminate\Http\JsonResponse
+     * @return JsonResponse|ConsultationRequestResource
      */
     public function show($id)
     {
         $user = Auth::user();
         if (!$user) {
-            return response()->json([
-                'success' => false, 
-                'message' => 'Unauthorized'
-            ], 401);
+            return $this->unauthorizedResponse();
         }
         
-        $consultation = ConsultationRequest::with(['client', 'lawyer'])->findOrFail($id);
-        
-        // Ensure the user can only see their own consultations
-        if ($user->role === 'client' && $consultation->client_id !== $user->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You can only view your own consultation requests'
-            ], 403);
-        } elseif ($user->role === 'lawyer' && $consultation->lawyer_id !== $user->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'You can only view consultations assigned to you'
-            ], 403);
+        try {
+            $consultation = ConsultationRequest::with(['client', 'lawyer'])->findOrFail($id);
+            
+            if (!$this->canViewConsultation($user, $consultation)) {
+                return $this->forbiddenResponse('You can only view your own consultation requests');
+            }
+            
+            return new ConsultationRequestResource($consultation);
+        } catch (\Exception $e) {
+            return $this->notFoundResponse('Consultation request not found');
+        }
+    }
+    
+    /**
+     * Create a new consultation request.
+     *
+     * @param int $clientId The client_id from the clients table
+     * @param int $lawyerId The lawyer_id from the lawyers table
+     * @param float $price
+     * @return ConsultationRequest
+     */
+    private function createConsultationRequest(int $clientId, int $lawyerId, float $price): ConsultationRequest
+    {
+        return ConsultationRequest::create([
+            'client_id' => $clientId,
+            'lawyer_id' => $lawyerId,
+            'price' => $price,
+            'status' => ConsultationRequest::STATUS_PENDING,
+        ]);
+    }
+    
+    /**
+     * Check if user can view the consultation.
+     *
+     * @param User $user
+     * @param ConsultationRequest $consultation
+     * @return bool
+     */
+    private function canViewConsultation(User $user, ConsultationRequest $consultation): bool
+    {
+        if ($user->role === 'client') {
+            $client = Client::where('user_id', $user->id)->first();
+            return $client && $consultation->client_id === $client->client_id;
         }
         
-        return new ConsultationRequestResource($consultation);
+        if ($user->role === 'lawyer') {
+            $lawyer = Lawyer::where('user_id', $user->id)->first();
+            return $lawyer && $consultation->lawyer_id === $lawyer->lawyer_id;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Return unauthorized response.
+     *
+     * @return JsonResponse
+     */
+    private function unauthorizedResponse(): JsonResponse
+    {
+        return response()->json([
+            'success' => false, 
+            'message' => 'Unauthorized'
+        ], 401);
+    }
+    
+    /**
+     * Return forbidden response.
+     *
+     * @param string $message
+     * @return JsonResponse
+     */
+    private function forbiddenResponse(string $message): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message
+        ], 403);
+    }
+    
+    /**
+     * Return not found response.
+     *
+     * @param string $message
+     * @return JsonResponse
+     */
+    private function notFoundResponse(string $message): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message
+        ], 404);
+    }
+    
+    /**
+     * Return validation error response.
+     *
+     * @param string $message
+     * @return JsonResponse
+     */
+    private function validationErrorResponse(string $message): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message
+        ], 422);
+    }
+    
+    /**
+     * Return server error response.
+     *
+     * @param string $message
+     * @param string|null $error
+     * @return JsonResponse
+     */
+    private function serverErrorResponse(string $message, ?string $error = null): JsonResponse
+    {
+        $response = [
+            'success' => false,
+            'message' => $message,
+        ];
+        
+        if ($error) {
+            $response['error'] = $error;
+        }
+        
+        return response()->json($response, 500);
     }
 } 
