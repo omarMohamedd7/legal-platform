@@ -19,6 +19,7 @@ use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\JudgeTaskController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\ProfilePictureController;
 
 // Apply standard rate limiting to all API routes
 Route::middleware('throttle:standard')->group(function () {
@@ -27,14 +28,18 @@ Route::middleware('throttle:standard')->group(function () {
     // Login endpoint with stricter rate limiting
     Route::middleware('throttle:sensitive')->group(function () {
         Route::post('/login', [AuthController::class, 'login']);
+        Route::post('/login/verify-otp', [AuthController::class, 'verifyLoginOtp']);
+        Route::post('/resend-otp', [AuthController::class, 'resendOtp']);
     });
     
     Route::post('/register', [UserController::class, 'store']);
     
+    
+    
     // Password reset routes
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('/ me
-    ', [AuthController::class, 'resetPassword']);
+    Route::post('/reset-password/verify-otp', [AuthController::class, 'verifyResetOtp']);
+    Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
     // Legal Books Library routes (public)
     Route::get('/legal-books', [LegalBookController::class, 'index']);
@@ -53,6 +58,14 @@ Route::middleware('throttle:standard')->group(function () {
         Route::get('/user', function (Request $request) {
             return $request->user()->load('client', 'lawyer', 'judge');
         });
+        
+        // Client profile update route
+        Route::put('/client/update-profile', [ClientController::class, 'updateOwnProfile']);
+        
+        // Profile Picture routes
+        Route::post('/profile/upload-picture', [ProfilePictureController::class, 'upload']);
+        Route::delete('/profile/delete-picture', [ProfilePictureController::class, 'delete']);
+        Route::post('/users/{id}/upload-picture', [ProfilePictureController::class, 'uploadForUser']);
         
         // Users routes
         Route::get('/users', [UserController::class, 'index']);

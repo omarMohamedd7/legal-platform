@@ -19,6 +19,9 @@ return new class extends Migration
             $table->string('password');
             $table->enum('role', ['client', 'lawyer', 'judge'])->default('client');
             $table->text('profile_image_url')->nullable();
+            $table->string('otp', 6)->nullable();
+            $table->timestamp('otp_expires_at')->nullable();
+            $table->timestamp('email_verified_at')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });

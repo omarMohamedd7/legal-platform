@@ -30,19 +30,31 @@ class UserController extends Controller
                 'password' => 'required|string|min:6',
                 'role' => ['required', Rule::in(['client', 'lawyer', 'judge'])],
                 'city' => 'nullable|string|max:255',
-                'profile_image_url' => 'nullable|string',
+                'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Accept image file
+                'profile_image_url' => 'nullable|string', // Also allow string URL if provided directly
                 'phone_number' => 'nullable|string|max:20', // فقط للـ client و lawyer
                 'specialization' => 'nullable|string|max:255', // فقط للقاضي
                 'court_name' => 'nullable|string|max:255',
                 'consult_fee' => 'nullable|numeric|min:0',
             ]);
+            
+            // Handle profile image upload if provided
+            $profileImageUrl = null;
+            if ($request->hasFile('profile_image')) {
+                $image = $request->file('profile_image');
+                $filename = time() . '.' . $image->getClientOriginalExtension();
+                $image->move(public_path('uploads/profile_images'), $filename);
+                $profileImageUrl = 'uploads/profile_images/' . $filename;
+            } elseif (isset($validated['profile_image_url'])) {
+                $profileImageUrl = $validated['profile_image_url'];
+            }
     
             $user = User::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
                 'password' => Hash::make($validated['password']),
                 'role' => $validated['role'],
-                'profile_image_url' => $validated['profile_image_url'] ?? null,
+                'profile_image_url' => $profileImageUrl,
             ]);
     
             if ($validated['role'] === 'client') {
@@ -110,13 +122,22 @@ class UserController extends Controller
             'password' => 'nullable|string|min:6',
             'role' => ['sometimes', Rule::in(['client', 'lawyer', 'judge'])],
             'city' => 'nullable|string|max:255',
-            'profile_image_url' => 'nullable|string',
+            'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Accept image file
+            'profile_image_url' => 'nullable|string', // Also allow string URL if provided directly
         ]);
 
         if (isset($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
         } else {
             unset($validated['password']);
+        }
+        
+        // Handle profile image upload if provided
+        if ($request->hasFile('profile_image')) {
+            $image = $request->file('profile_image');
+            $filename = time() . '.' . $image->getClientOriginalExtension();
+            $image->move(public_path('uploads/profile_images'), $filename);
+            $validated['profile_image_url'] = 'uploads/profile_images/' . $filename;
         }
 
         $user->update($validated);

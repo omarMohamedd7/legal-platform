@@ -21,107 +21,106 @@ class CaseRequestController extends Controller
      * @return \Illuminate\Http\JsonResponse
      */
     public function store(Request $request)
-    {
-        try {
-            $user = Auth::user();
-            
-            if (!$user || $user->role !== 'client') {
-                return response()->json(['message' => 'غير مصرح. يمكن للعملاء فقط إنشاء طلبات قضايا.'], 403);
-            }
-            
-            $client = $user->client;
-            
-            if (!$client) {
-                return response()->json(['message' => 'لم يتم العثور على ملف العميل.'], 404);
-            }
-            
-            // Get the lawyer
-            $lawyer = Lawyer::findOrFail($request->lawyer_id);
-            
-            // Validate input
-            $validated = $request->validate([
-                'lawyer_id' => 'required|exists:lawyers,lawyer_id',
-                'case_number' => 'nullable|string',
-                'plaintiff_name' => 'nullable|string|max:255',
-                'defendant_name' => 'nullable|string|max:255',
-                'description' => 'required|string',
-                'attachments' => 'nullable|array',
-                'attachments.*' => 'file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240',
-            ]);
-            
-            // Generate a case number if not provided
-            $caseNumber = $validated['case_number'] ?? 'CASE-' . time() . '-' . rand(1000, 9999);
-            
-            // Handle attachments if provided
-            $attachments = [];
-            if ($request->hasFile('attachments')) {
-                foreach ($request->file('attachments') as $file) {
-                    $path = $file->store('case_attachments', 'public');
-                    
-                    $attachments[] = [
-                        'path' => $path,
-                        'type' => $file->getClientMimeType(),
-                        'name' => $file->getClientOriginalName(),
-                        'uploaded_by' => $user->id,
-                        'uploaded_at' => now()->toIso8601String(),
-                    ];
-                }
-            }
-            
-            // Create the legal case with lawyer's specialization as case_type
-            $legalCase = LegalCase::create([
-                'case_number' => $caseNumber,
-                'case_type' => $lawyer->specialization,
-                'plaintiff_name' => $validated['plaintiff_name'] ?? null,
-                'defendant_name' => $validated['defendant_name'] ?? null,
-                'description' => $validated['description'],
-                'status' => 'Pending', // Initial status is pending until lawyer accepts
-                'attachments' => !empty($attachments) ? $attachments : null,
-                'created_by_id' => $user->id,
-                'assigned_lawyer_id' => $lawyer->lawyer_id,
-            ]);
-            
-            // Create the case request
-            $caseRequest = CaseRequest::create([
-                'client_id' => $client->client_id,
-                'lawyer_id' => $lawyer->lawyer_id,
-                'case_id' => $legalCase->case_id,
-                'attachments' => !empty($attachments) ? $attachments : null,
-                'status' => 'Pending',
-            ]);
-            
-            return response()->json([
-                'message' => 'تم إنشاء طلب القضية بنجاح.',
-                'request' => [
-                    'request_id' => $caseRequest->request_id,
-                    'status' => $caseRequest->status,
-                    'created_at' => $caseRequest->created_at,
-                    'attachments' => $caseRequest->attachments,
-                ],
-                'case' => [
-                    'case_id' => $legalCase->case_id,
-                    'case_number' => $legalCase->case_number,
-                    'case_type' => $legalCase->case_type,
-                    'plaintiff_name' => $legalCase->plaintiff_name,
-                    'defendant_name' => $legalCase->defendant_name,
-                    'description' => $legalCase->description,
-                    'status' => $legalCase->status,
-                    'attachments' => $legalCase->attachments,
-                ],
-                'lawyer' => [
-                    'lawyer_id' => $lawyer->lawyer_id,
-                    'name' => $lawyer->user->name,
-                    'specialization' => $lawyer->specialization,
-                ],
-            ], 201);
-        } catch (\Exception $e) {
-            Log::error('Error creating case request: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'حدث خطأ أثناء إنشاء طلب القضية.',
-                'error' => $e->getMessage()
-            ], 500);
+{
+    try {
+        $user = Auth::user();
+
+        if (!$user || $user->role !== 'client') {
+            return response()->json(['message' => 'غير مصرح. يمكن للعملاء فقط إنشاء طلبات قضايا.'], 403);
         }
+
+        $client = $user->client;
+
+        if (!$client) {
+            return response()->json(['message' => 'لم يتم العثور على ملف العميل.'], 404);
+        }
+
+        // Validate input
+        $validated = $request->validate([
+            'lawyer_id' => 'required|exists:lawyers,lawyer_id',
+            'case_number' => 'nullable|string',
+            'plaintiff_name' => 'nullable|string|max:255',
+            'defendant_name' => 'nullable|string|max:255',
+            'description' => 'required|string',
+            'attachment' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240',
+        ]);
+
+        // Get the lawyer
+        $lawyer = Lawyer::findOrFail($validated['lawyer_id']);
+
+        // Generate a case number if not provided
+        $caseNumber = $validated['case_number'] ?? 'CASE-' . time() . '-' . rand(1000, 9999);
+
+        // Handle single attachment
+        $attachment = null;
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            $path = $file->store('case_attachments', 'public');
+            $attachment = [
+                'path' => $path,
+                'type' => $file->getClientMimeType(),
+                'name' => $file->getClientOriginalName(),
+                'uploaded_by' => $user->id,
+                'uploaded_at' => now()->toIso8601String(),
+            ];
+        }
+
+        // Create the legal case
+        $legalCase = LegalCase::create([
+            'case_number' => $caseNumber,
+            'case_type' => $lawyer->specialization,
+            'plaintiff_name' => $validated['plaintiff_name'] ?? null,
+            'defendant_name' => $validated['defendant_name'] ?? null,
+            'description' => $validated['description'],
+            'status' => 'Pending',
+            'attachments' => $attachment,
+            'created_by_id' => $user->id,
+            'assigned_lawyer_id' => $lawyer->lawyer_id,
+        ]);
+
+        // Create the case request
+        $caseRequest = CaseRequest::create([
+            'client_id' => $client->client_id,
+            'lawyer_id' => $lawyer->lawyer_id,
+            'case_id' => $legalCase->case_id,
+            'attachments' => $attachment,
+            'status' => 'Pending',
+        ]);
+
+        return response()->json([
+            'message' => 'تم إنشاء طلب القضية بنجاح.',
+            'request' => [
+                'request_id' => $caseRequest->request_id,
+                'status' => $caseRequest->status,
+                'created_at' => $caseRequest->created_at,
+                'attachments' => $caseRequest->attachments,
+            ],
+            'case' => [
+                'case_id' => $legalCase->case_id,
+                'case_number' => $legalCase->case_number,
+                'case_type' => $legalCase->case_type,
+                'plaintiff_name' => $legalCase->plaintiff_name,
+                'defendant_name' => $legalCase->defendant_name,
+                'description' => $legalCase->description,
+                'status' => $legalCase->status,
+                'attachments' => $legalCase->attachments,
+            ],
+            'lawyer' => [
+                'lawyer_id' => $lawyer->lawyer_id,
+                'name' => $lawyer->user->name,
+                'specialization' => $lawyer->specialization,
+            ],
+        ], 201);
+
+    } catch (\Exception $e) {
+        Log::error('Error creating case request: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'حدث خطأ أثناء إنشاء طلب القضية.',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
+
 
     /**
      * Accept a case request (lawyer endpoint)

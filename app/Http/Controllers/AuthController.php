@@ -12,10 +12,20 @@ use Illuminate\Support\Str;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
+use App\Services\OtpService;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
 {
-    // تسجيل الدخول
+    protected $otpService;
+    
+    public function __construct(OtpService $otpService)
+    {
+        $this->otpService = $otpService;
+    }
+    
+    // تسجيل الدخول - Step 1: Request login and receive OTP
     public function login(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -47,12 +57,79 @@ class AuthController extends Controller
             ], 401);
         }
     
+        // Generate and send OTP
+        $otp = $this->otpService->generateOtp($user);
+        $this->otpService->sendOtpEmail($user, $otp, 'authentication');
+    
+        return response()->json([
+            'success' => true,
+            'message' => 'OTP sent to your email',
+            'user_id' => $user->id,
+            'requires_otp' => true
+        ]);
+    }
+    
+    // تسجيل الدخول - Step 2: Verify OTP and complete login
+    public function verifyLoginOtp(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|exists:users,id',
+            'otp' => 'required|string|size:6',
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        $user = User::findOrFail($request->user_id);
+        
+        if (!$this->otpService->verifyOtp($user, $request->otp)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid or expired OTP'
+            ], 401);
+        }
+        
+        // OTP verified, create token and complete login
         $token = $user->createToken('auth_token')->plainTextToken;
     
         return (new UserResource($user))
             ->withMessage('Login successful')
             ->additional([
                 'token' => $token
+            ]);
+    }
+    
+    // Resend OTP if expired
+    public function resendOtp(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|exists:users,id',
+            'purpose' => 'required|in:authentication,password_reset',
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        $user = User::findOrFail($request->user_id);
+        
+        // Generate and send new OTP
+        $otp = $this->otpService->generateOtp($user);
+        $this->otpService->sendOtpEmail($user, $otp, $request->purpose);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'New OTP sent to your email',
+            'user_id' => $user->id
             ]);
     }
 
@@ -97,25 +174,109 @@ class AuthController extends Controller
      */
     public function forgotPassword(Request $request)
     {
+        try {
         $request->validate([
             'email' => 'required|email',
         ]);
 
-        // We will send the password reset link to this user
-        $status = Password::sendResetLink(
-            $request->only('email')
-        );
+            Log::info('Password reset requested for email: ' . $request->email);
 
-        if ($status === Password::RESET_LINK_SENT) {
+            $user = User::where('email', $request->email)->first();
+            
+            if (!$user) {
+                Log::warning('Password reset requested for non-existent email: ' . $request->email);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+            
+            // Generate and send OTP for password reset
+            $otp = $this->otpService->generateOtp($user);
+            Log::info('OTP generated for user ID ' . $user->id . ': ' . $otp);
+            
+            try {
+                $this->otpService->sendOtpEmail($user, $otp, 'password_reset');
+                Log::info('OTP email sent successfully to: ' . $user->email);
+            } catch (\Exception $e) {
+                Log::error('Failed to send OTP email: ' . $e->getMessage());
+                // Continue execution to return user_id even if email fails
+            }
+            
             return response()->json([
                 'success' => true,
-                'message' => __($status)
+                'message' => 'Password reset OTP sent to your email',
+                'user_id' => $user->id
             ]);
+        } catch (\Exception $e) {
+            Log::error('Error in forgotPassword: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while processing your request',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        throw ValidationException::withMessages([
-            'email' => [__($status)],
-        ]);
+    }
+    
+    /**
+     * Verify OTP for password reset
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function verifyResetOtp(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'user_id' => 'required|exists:users,id',
+                'otp' => 'required|string|size:6',
+            ]);
+            
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+            
+            $user = User::findOrFail($request->user_id);
+            
+            Log::info('Verifying OTP for password reset for user ID: ' . $user->id);
+            
+            if (!$this->otpService->verifyOtp($user, $request->otp)) {
+                Log::warning('Invalid or expired OTP for user ID: ' . $user->id);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or expired OTP'
+                ], 401);
+            }
+            
+            // Generate a password reset token that will be used in the reset step
+            $token = Str::random(60);
+            
+            // Store the token with expiration time
+            $user->update([
+                'remember_token' => $token,
+                'email_verified_at' => Carbon::now(), // Mark email as verified
+            ]);
+            
+            Log::info('OTP verified successfully for user ID: ' . $user->id);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'OTP verified successfully',
+                'reset_token' => $token,
+                'user_id' => $user->id
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error in verifyResetOtp: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while processing your request',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -126,34 +287,47 @@ class AuthController extends Controller
      */
     public function resetPassword(Request $request)
     {
+        try {
         $request->validate([
-            'token' => 'required',
-            'email' => 'required|email',
+                'user_id' => 'required|exists:users,id',
+                'token' => 'required|string',
             'password' => ['required', 'confirmed', PasswordRule::defaults()],
         ]);
 
-        // Here we will attempt to reset the user's password
-        $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function (User $user, string $password) {
-                $user->forceFill([
-                    'password' => Hash::make($password),
-                    'remember_token' => Str::random(60),
-                ])->save();
+            $user = User::findOrFail($request->user_id);
+            
+            Log::info('Password reset attempted for user ID: ' . $user->id);
+            
+            // Verify that the token matches
+            if ($user->remember_token !== $request->token) {
+                Log::warning('Invalid reset token for user ID: ' . $user->id);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid reset token'
+                ], 401);
+            }
+            
+            // Update password and clear the token
+            $user->update([
+                'password' => Hash::make($request->password),
+                'remember_token' => null,
+            ]);
+            
+            Log::info('Password reset successful for user ID: ' . $user->id);
 
                 event(new PasswordReset($user));
-            }
-        );
-
-        if ($status === Password::PASSWORD_RESET) {
+            
             return response()->json([
                 'success' => true,
-                'message' => __($status)
+                'message' => 'Password has been reset successfully'
             ]);
+        } catch (\Exception $e) {
+            Log::error('Error in resetPassword: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while processing your request',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        throw ValidationException::withMessages([
-            'email' => [__($status)],
-        ]);
     }
 }

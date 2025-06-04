@@ -27,6 +27,8 @@ class User extends Authenticatable
         'profile_image_url',
         'email_verified_at',
         'remember_token',
+        'otp',
+        'otp_expires_at',
     ];
 
     /**
@@ -65,5 +67,19 @@ class User extends Authenticatable
     public function judge()
     {
         return $this->hasOne(Judge::class);
+    }
+
+    /**
+     * Get the full URL of the user's profile image
+     *
+     * @return string|null
+     */
+    public function getProfileImageUrl(): ?string
+    {
+        if (!$this->profile_image_url) {
+            return null;
+        }
+        
+        return url($this->profile_image_url);
     }
 }

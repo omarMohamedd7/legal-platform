@@ -28,7 +28,7 @@ class ClientResource extends JsonResource
     {
         return [
             'client_id' => $this->client_id,
-            'phone' => $this->phone,
+            'phone_number' => $this->phone_number,
             'city' => $this->city,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),

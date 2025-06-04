@@ -336,7 +336,16 @@ class PublishedCaseController extends Controller
                 return response()->json(['message' => 'غير مصرح. يمكن للعملاء فقط إغلاق قضاياهم المنشورة.'], 403);
             }
             
-            $publishedCase = PublishedCase::findOrFail($id);
+            // Try to find the published case with improved error handling
+            try {
+                $publishedCase = PublishedCase::with('legalCase')->findOrFail($id);
+            } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'القضية المنشورة غير موجودة. يرجى التحقق من الرقم المعرف.',
+                    'error' => 'Published case not found'
+                ], 404);
+            }
             
             // التأكد من أن العميل هو صاحب القضية
             if ($user->client->client_id !== $publishedCase->client_id) {
@@ -350,14 +359,30 @@ class PublishedCaseController extends Controller
                     'current_status' => $publishedCase->status
                 ], 400);
             }
+
+            // التحقق من أن حالة القضية القانونية المرتبطة هي "معلقة"
+            if (!$publishedCase->legalCase || $publishedCase->legalCase->status !== 'Pending') {
+                return response()->json([
+                    'message' => 'لا يمكن إغلاق هذه القضية. يمكن فقط إغلاق القضايا المنشورة عندما تكون القضية القانونية المرتبطة في حالة معلقة.',
+                    'current_legal_case_status' => $publishedCase->legalCase ? $publishedCase->legalCase->status : 'غير موجودة'
+                ], 400);
+            }
             
+            // تغيير حالة القضية المنشورة إلى "مغلقة"
             $publishedCase->status = 'Closed';
             $publishedCase->save();
+            
+            // تغيير حالة القضية القانونية المرتبطة إلى "مغلقة" أيضاً
+            if ($publishedCase->legalCase) {
+                $publishedCase->legalCase->status = 'Closed';
+                $publishedCase->legalCase->save();
+            }
             
             return response()->json([
                 'message' => 'تم إغلاق القضية المنشورة بنجاح.',
                 'published_case_id' => $publishedCase->published_case_id,
-                'status' => $publishedCase->status,
+                'published_case_status' => $publishedCase->status,
+                'legal_case_status' => $publishedCase->legalCase ? $publishedCase->legalCase->status : null,
                 'updated_at' => $publishedCase->updated_at
             ]);
         } catch (\Exception $e) {

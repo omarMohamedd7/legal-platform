@@ -19,7 +19,8 @@ class UserResource extends BaseResource
             'name' => $this->name,
             'email' => $this->email,
             'role' => $this->role,
-            'profile_pic' => $this->profile_pic,
+            'profile_image_url' => $this->profile_image_url,
+            'profile_image_full_url' => $this->getProfileImageUrl(),
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
         ];
