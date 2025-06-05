@@ -64,7 +64,7 @@ class AuthController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'OTP sent to your email',
-            'user_id' => $user->id,
+            'email' => $user->email,
             'requires_otp' => true
         ]);
     }
@@ -73,7 +73,7 @@ class AuthController extends Controller
     public function verifyLoginOtp(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            'email' => 'required|email|exists:users,email',
             'otp' => 'required|string|size:6',
         ]);
         
@@ -85,7 +85,7 @@ class AuthController extends Controller
             ], 422);
         }
         
-        $user = User::findOrFail($request->user_id);
+        $user = User::where('email', $request->email)->firstOrFail();
         
         if (!$this->otpService->verifyOtp($user, $request->otp)) {
             return response()->json([
@@ -108,7 +108,7 @@ class AuthController extends Controller
     public function resendOtp(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            'email' => 'required|email|exists:users,email',
             'purpose' => 'required|in:authentication,password_reset',
         ]);
         
@@ -120,7 +120,7 @@ class AuthController extends Controller
             ], 422);
         }
         
-        $user = User::findOrFail($request->user_id);
+        $user = User::where('email', $request->email)->firstOrFail();
         
         // Generate and send new OTP
         $otp = $this->otpService->generateOtp($user);
@@ -129,7 +129,7 @@ class AuthController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'New OTP sent to your email',
-            'user_id' => $user->id
+            'email' => $user->email
             ]);
     }
 
@@ -200,13 +200,13 @@ class AuthController extends Controller
                 Log::info('OTP email sent successfully to: ' . $user->email);
             } catch (\Exception $e) {
                 Log::error('Failed to send OTP email: ' . $e->getMessage());
-                // Continue execution to return user_id even if email fails
+                // Continue execution to return email even if email fails
             }
             
             return response()->json([
                 'success' => true,
                 'message' => 'Password reset OTP sent to your email',
-                'user_id' => $user->id
+                'email' => $user->email
             ]);
         } catch (\Exception $e) {
             Log::error('Error in forgotPassword: ' . $e->getMessage());

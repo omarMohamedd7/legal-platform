@@ -442,4 +442,74 @@ class LawyerController extends Controller
         }
     }
 
+    /**
+     * Get all active cases with client information for a specific lawyer
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getClientsCases(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            
+            // Check if authenticated user is a lawyer
+            if (!$user || $user->role !== 'lawyer') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'غير مصرح. هذه الخدمة متاحة للمحامين فقط.'
+                ], 403);
+            }
+            
+            $lawyer = $user->lawyer;
+            
+            if (!$lawyer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'لم يتم العثور على ملف المحامي.'
+                ], 404);
+            }
+            
+            // Get all active cases assigned to this lawyer
+            $cases = \App\Models\LegalCase::with(['createdBy.client'])
+                ->where('assigned_lawyer_id', $lawyer->lawyer_id)
+                ->where('status', 'active')
+                ->get();
+            
+            // Format the response data
+            $formattedCases = $cases->map(function($case) {
+                $client = $case->createdBy->client ?? null;
+                
+                return [
+                    'case_id' => $case->case_id,
+                    'case_number' => $case->case_number,
+                    'case_type' => $case->case_type,
+                    'status' => $case->status,
+                    'description' => $case->description,
+                    'client' => $client ? [
+                        'id' => $client->client_id,
+                        'name' => $case->createdBy->name,
+                        'phone_number' => $client->phone_number,
+                        'city' => $client->city,
+                        'profile_image_url' => $case->createdBy->profile_image_url ? url($case->createdBy->profile_image_url) : null,
+                    ] : null,
+                ];
+            });
+            
+            return response()->json([
+                'success' => true,
+                'data' => $formattedCases
+            ]);
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error getting lawyer clients cases: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب القضايا.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

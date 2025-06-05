@@ -71,6 +71,9 @@ Route::middleware('throttle:standard')->group(function () {
         Route::get('/client/city-lawyers', [LawyerController::class, 'getLawyersInClientCity']);
         Route::get('/lawyers', [LawyerController::class, 'getAllLawyers']);
         
+        // Lawyer clients and cases route
+        Route::get('/lawyer/clients-cases', [LawyerController::class, 'getClientsCases']);
+        
         // Profile Picture routes
         Route::post('/profile-picture', [ProfilePictureController::class, 'upload']);
         Route::delete('/profile-picture', [ProfilePictureController::class, 'delete']);
