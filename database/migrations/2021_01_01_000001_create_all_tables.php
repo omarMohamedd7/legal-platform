@@ -171,6 +171,8 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->date('date');
             $table->time('time');
+            $table->string('task_type');
+            $table->boolean('reminder_enabled')->default(false);
             $table->enum('status', ['pending', 'completed'])->default('pending');
             $table->timestamps();
         });

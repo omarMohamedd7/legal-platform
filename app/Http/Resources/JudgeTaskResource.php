@@ -21,6 +21,8 @@ class JudgeTaskResource extends JsonResource
             'description' => $this->description,
             'date' => $this->date->format('Y-m-d'),
             'time' => $this->time->format('H:i'),
+            'task_type' => $this->task_type,
+            'reminder_enabled' => $this->reminder_enabled,
             'status' => $this->status,
             'is_overdue' => $this->isOverdue(),
             'created_at' => $this->created_at,

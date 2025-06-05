@@ -22,8 +22,14 @@ class JudgeTaskController extends Controller
             return response()->json(['message' => 'Unauthorized. Only judges can access this resource.'], 403);
         }
 
+        // Get the judge's ID
+        $judge = $user->judge;
+        if (!$judge) {
+            return response()->json(['message' => 'Judge profile not found.'], 404);
+        }
+
         // Get all tasks for the authenticated judge
-        $tasks = JudgeTask::where('judge_id', $user->id)
+        $tasks = JudgeTask::where('judge_id', $judge->judge_id)
             ->orderBy('date', 'asc')
             ->orderBy('time', 'asc')
             ->get();
@@ -34,7 +40,10 @@ class JudgeTaskController extends Controller
         }
 
         // Return the tasks using the resource
-        return JudgeTaskResource::collection($tasks);
+        return response()->json([
+            'message' => 'Tasks retrieved successfully',
+            'data' => JudgeTaskResource::collection($tasks)
+        ]);
     }
 
     /**
@@ -51,26 +60,39 @@ class JudgeTaskController extends Controller
             return response()->json(['message' => 'Unauthorized. Only judges can create tasks.'], 403);
         }
 
+        // Get the judge's ID
+        $judge = $user->judge;
+        if (!$judge) {
+            return response()->json(['message' => 'Judge profile not found.'], 404);
+        }
+
         // Validate the request
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'date' => 'required|date|date_format:Y-m-d',
-            'time' => 'required|date_format:H:i',
+            'execution_date' => 'required|date|date_format:Y-m-d',
+            'start_time' => 'required|date_format:H:i',
+            'task_type' => 'required|string|max:50',
+            'reminder_enabled' => 'boolean',
         ]);
 
         // Create the task for the authenticated judge
         $task = JudgeTask::create([
-            'judge_id' => $user->id,
+            'judge_id' => $judge->judge_id,
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
-            'date' => $validated['date'],
-            'time' => $validated['time'],
+            'date' => $validated['execution_date'],
+            'time' => $validated['start_time'],
+            'task_type' => $validated['task_type'],
+            'reminder_enabled' => $validated['reminder_enabled'] ?? false,
             'status' => 'pending',
         ]);
 
-        // Return the created task using the resource
-        return new JudgeTaskResource($task);
+        // Return the created task
+        return response()->json([
+            'message' => 'Task created successfully',
+            'data' => new JudgeTaskResource($task)
+        ], 201);
     }
 
     /**
