@@ -512,4 +512,92 @@ class LawyerController extends Controller
         }
     }
 
+    /**
+     * Get all lawyer cases for frontend filtering
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getCases(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            
+            // Check if authenticated user is a lawyer
+            if (!$user || $user->role !== 'lawyer') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'غير مصرح. هذه الخدمة متاحة للمحامين فقط.'
+                ], 403);
+            }
+            
+            $lawyer = $user->lawyer;
+            
+            if (!$lawyer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'لم يتم العثور على ملف المحامي.'
+                ], 404);
+            }
+            
+            // Validate query parameters (optional status filter)
+            $validated = $request->validate([
+                'status' => 'nullable|in:active,closed',
+                'per_page' => 'nullable|integer|min:1|max:50',
+            ]);
+            
+            // Start building the query
+            $query = \App\Models\LegalCase::with(['createdBy.client'])
+                ->where('assigned_lawyer_id', $lawyer->lawyer_id);
+            
+            // Apply status filter if provided (optional)
+            if (isset($validated['status'])) {
+                // Map 'active' and 'closed' to the actual statuses in the database
+                $statusMap = [
+                    'active' => ['Active', 'Pending', 'In Progress'],
+                    'closed' => ['Closed', 'Completed', 'Cancelled', 'Rejected']
+                ];
+                
+                $statuses = $statusMap[$validated['status']];
+                $query->whereIn('status', $statuses);
+            }
+            
+            // Get paginated results
+            $perPage = $validated['per_page'] ?? 10;
+            $cases = $query->orderBy('created_at', 'desc')->paginate($perPage);
+            
+            // Format the response data
+            $formattedCases = $cases->map(function($case) {
+                return [
+                    'case_id' => $case->case_id,
+                    'case_type' => $case->case_type,
+                    'client_name' => $case->createdBy->name ?? 'Unknown',
+                    'case_number' => $case->case_number,
+                    'status' => strtolower($case->status),
+                    'description' => $case->description
+                ];
+            });
+            
+            return response()->json([
+                'success' => true,
+                'data' => $formattedCases,
+                'pagination' => [
+                    'current_page' => $cases->currentPage(),
+                    'last_page' => $cases->lastPage(),
+                    'per_page' => $cases->perPage(),
+                    'total' => $cases->total()
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error getting lawyer cases: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب القضايا.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

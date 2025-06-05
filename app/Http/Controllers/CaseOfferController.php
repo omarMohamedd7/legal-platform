@@ -13,19 +13,30 @@ class CaseOfferController extends Controller
 {
     /**
      * تقديم عرض على قضية منشورة
+     * Submit an offer for a published case
+     * 
+     * @param Request $request
+     * @param int $publishedCaseId
+     * @return \Illuminate\Http\JsonResponse
      */
     public function submitOffer(Request $request, $publishedCaseId)
     {
         $user = Auth::user();
         
         if (!$user || $user->role !== 'lawyer') {
-            return response()->json(['message' => 'غير مصرح. يمكن للمحامين فقط تقديم العروض.'], 403);
+            return response()->json([
+                'success' => false,
+                'message' => 'غير مصرح. يمكن للمحامين فقط تقديم العروض.'
+            ], 403);
         }
         
         $lawyer = $user->lawyer;
         
         if (!$lawyer) {
-            return response()->json(['message' => 'لم يتم العثور على ملف المحامي.'], 404);
+            return response()->json([
+                'success' => false,
+                'message' => 'لم يتم العثور على ملف المحامي.'
+            ], 404);
         }
         
         $publishedCase = PublishedCase::findOrFail($publishedCaseId);
@@ -33,6 +44,7 @@ class CaseOfferController extends Controller
         // التحقق مما إذا كانت القضية نشطة
         if ($publishedCase->status !== 'Active') {
             return response()->json([
+                'success' => false,
                 'message' => 'لا يمكن تقديم عرض لهذه القضية. فقط القضايا النشطة تقبل العروض.',
                 'current_status' => $publishedCase->status
             ], 400);
@@ -40,7 +52,10 @@ class CaseOfferController extends Controller
         
         // التحقق مما إذا كانت القضية مناسبة لتخصص وموقع المحامي
         if ($publishedCase->target_specialization && $publishedCase->target_specialization !== $lawyer->specialization) {
-            return response()->json(['message' => 'غير مصرح. هذه القضية لا تناسب تخصصك.'], 403);
+            return response()->json([
+                'success' => false,
+                'message' => 'غير مصرح. هذه القضية لا تناسب تخصصك.'
+            ], 403);
         }
         
        
@@ -51,25 +66,29 @@ class CaseOfferController extends Controller
             ->first();
             
         if ($existingOffer) {
-            return response()->json(['message' => 'لقد قدمت عرضاً بالفعل لهذه القضية.'], 400);
+            return response()->json([
+                'success' => false,
+                'message' => 'لقد قدمت عرضاً بالفعل لهذه القضية.'
+            ], 400);
         }
         
         // التحقق من بيانات العرض
         $validated = $request->validate([
-            'price' => 'required|numeric|min:0',
-            'description' => 'required|string',
+            'expected_price' => 'required|numeric|min:0',
+            'message' => 'required|string',
         ]);
         
         // إنشاء العرض
         $offer = CaseOffer::create([
             'published_case_id' => $publishedCaseId,
             'lawyer_id' => $lawyer->lawyer_id,
-            'price' => $validated['price'],
-            'description' => $validated['description'],
+            'expected_price' => $validated['expected_price'],
+            'message' => $validated['message'],
             'status' => 'Pending',
         ]);
         
         return response()->json([
+            'success' => true,
             'message' => 'تم تقديم العرض بنجاح.',
             'offer' => $offer
         ], 201);
@@ -346,6 +365,119 @@ class CaseOfferController extends Controller
                 'message' => 'حدث خطأ أثناء جلب العروض.',
                 'error' => $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Process an offer action (accept or reject)
+     * 
+     * @param Request $request
+     * @param int $offerId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function processOfferAction(Request $request, $offerId)
+    {
+        // Validate the action parameter
+        $validated = $request->validate([
+            'action' => 'required|string|in:accept,reject',
+        ]);
+        
+        $user = Auth::user();
+        
+        if (!$user || $user->role !== 'client') {
+            return response()->json([
+                'success' => false,
+                'message' => 'غير مصرح. يمكن للعملاء فقط قبول أو رفض العروض.'
+            ], 403);
+        }
+        
+        $client = $user->client;
+        
+        if (!$client) {
+            return response()->json([
+                'success' => false,
+                'message' => 'لم يتم العثور على ملف العميل.'
+            ], 404);
+        }
+        
+        $offer = CaseOffer::with('publishedCase')->findOrFail($offerId);
+        
+        // التأكد من أن العميل هو صاحب القضية
+        if ($client->client_id !== $offer->publishedCase->client_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'غير مصرح. هذا العرض ليس لقضيتك.'
+            ], 403);
+        }
+        
+        // التحقق مما إذا كان العرض في حالة انتظار
+        if ($offer->status !== 'Pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'لا يمكن معالجة هذا العرض. فقط العروض في حالة الانتظار يمكن معالجتها.',
+                'current_status' => $offer->status
+            ], 400);
+        }
+        
+        // Process based on action
+        if ($validated['action'] === 'accept') {
+            // التحقق مما إذا كانت القضية المنشورة نشطة
+            if ($offer->publishedCase->status !== 'Active') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'لا يمكن قبول العروض لهذه القضية. القضية ليست نشطة.',
+                    'current_status' => $offer->publishedCase->status
+                ], 400);
+            }
+            
+            // بدء معاملة لضمان تحديث جميع البيانات بشكل متسق
+            DB::beginTransaction();
+            
+            try {
+                // تحديث حالة العرض
+                $offer->status = 'Accepted';
+                $offer->save();
+                
+                // تحديث حالة القضية المنشورة
+                $offer->publishedCase->status = 'Closed';
+                $offer->publishedCase->save();
+                
+                // تحديث حالة القضية الأساسية وإسناد المحامي
+                $legalCase = $offer->publishedCase->legalCase;
+                $legalCase->status = 'Active';
+                $legalCase->assigned_lawyer_id = $offer->lawyer_id;
+                $legalCase->save();
+                
+                // رفض جميع العروض الأخرى
+                CaseOffer::where('published_case_id', $offer->published_case_id)
+                    ->where('offer_id', '!=', $offerId)
+                    ->update(['status' => 'Rejected']);
+                
+                DB::commit();
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'تم قبول العرض بنجاح وتفعيل القضية.',
+                    'offer' => $offer->load(['lawyer.user', 'publishedCase.legalCase'])
+                ]);
+            } catch (\Exception $e) {
+                DB::rollBack();
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'حدث خطأ أثناء قبول العرض.',
+                    'error' => $e->getMessage()
+                ], 500);
+            }
+        } else { // reject
+            // تحديث حالة العرض
+            $offer->status = 'Rejected';
+            $offer->save();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'تم رفض العرض بنجاح.'
+            ]);
         }
     }
 } 

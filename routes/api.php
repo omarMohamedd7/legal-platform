@@ -61,60 +61,51 @@ Route::middleware('throttle:standard')->group(function () {
             return $request->user()->load('client', 'lawyer', 'judge');
         });
         
-        // Client profile update route
-        Route::put('/client/update-profile', [ClientController::class, 'updateOwnProfile']);
-        
-        // Lawyer profile update route
-        Route::put('/lawyer/update-profile', [LawyerController::class, 'updateOwnProfile']);
-        
-        // Lawyers listing routes
-        Route::get('/client/city-lawyers', [LawyerController::class, 'getLawyersInClientCity']);
-        Route::get('/lawyers', [LawyerController::class, 'getAllLawyers']);
-        
-        // Lawyer clients and cases route
-        Route::get('/lawyer/clients-cases', [LawyerController::class, 'getClientsCases']);
-        
         // Profile Picture routes
         Route::post('/profile-picture', [ProfilePictureController::class, 'upload']);
         Route::delete('/profile-picture', [ProfilePictureController::class, 'delete']);
         
+        // Client routes
+        Route::prefix('client')->group(function () {
+            Route::get('/case-requests', [CaseRequestController::class, 'getClientRequests']);
+            Route::get('/published-cases', [PublishedCaseController::class, 'getClientPublishedCases']);
+            Route::get('/case-offers', [CaseOfferController::class, 'getClientCaseOffers']);
+            Route::get('/city-lawyers', [LawyerController::class, 'getLawyersInClientCity']);
+            Route::put('/update-profile', [ClientController::class, 'updateOwnProfile']);
+        });
+        
+        // Lawyer routes
+        Route::prefix('lawyer')->group(function () {
+            Route::get('/case-requests', [CaseRequestController::class, 'getLawyerRequests']);
+            Route::post('/case-requests/{id}/action', [CaseRequestController::class, 'action']);
+            Route::get('/available-cases', [PublishedCaseController::class, 'getAvailableCasesForLawyer']);
+            Route::get('/case-offers', [CaseOfferController::class, 'getLawyerOffers']);
+            Route::get('/clients-cases', [LawyerController::class, 'getClientsCases']);
+            Route::get('/cases', [LawyerController::class, 'getCases']);
+            Route::get('/court-sessions', [CourtSessionController::class, 'getLawyerSessions']);
+            Route::put('/update-profile', [LawyerController::class, 'updateOwnProfile']);
+        });
+        
         // طلبات التوكيل المباشر (Direct Case Requests)
         Route::post('/case-requests', [CaseRequestController::class, 'store']);
-        //lawyer accept or refuse requests
-        Route::post('/case-requests/{id}/accept', [CaseRequestController::class, 'accept']);
-        Route::post('/case-requests/{id}/reject', [CaseRequestController::class, 'reject']);
-        //get client requests
-        Route::get('/client/case-requests', [CaseRequestController::class, 'getClientRequests']);
-        //get lawyer requests
-        Route::get('/lawyer/case-requests', [CaseRequestController::class, 'getLawyerRequests']);
         
         // النشر العام للقضايا (Published Cases)
         Route::post('/published-cases', [PublishedCaseController::class, 'publishCase']);
-        //get available cases for lawyer
-        Route::get('/lawyer/available-cases', [PublishedCaseController::class, 'getAvailableCasesForLawyer']);
-        //get client published cases
-        Route::get('/client/published-cases', [PublishedCaseController::class, 'getClientPublishedCases']);
-        //get published case
         Route::get('/published-cases/{id}', [PublishedCaseController::class, 'show']);
-        //close published case
         Route::post('/published-cases/{id}/close', [PublishedCaseController::class, 'closePublishedCase']);
-        
-        // عروض المحامين على القضايا المنشورة (Case Offers)
         Route::post('/published-cases/{id}/offers', [CaseOfferController::class, 'submitOffer']);
+        
         //client accept or refuse offers
-        Route::post('/case-offers/{id}/accept', [CaseOfferController::class, 'acceptOffer']);
-        Route::post('/case-offers/{id}/reject', [CaseOfferController::class, 'rejectOffer']);
-        //get lawyer offers
-        Route::get('/lawyer/case-offers', [CaseOfferController::class, 'getLawyerOffers']);
-        //get client case offers
-        Route::get('/client/case-offers', [CaseOfferController::class, 'getClientCaseOffers']);
+        Route::post('/case-offers/{id}/action', [CaseOfferController::class, 'processOfferAction']);
+        
+        // Lawyers listing routes
+        Route::get('/lawyers', [LawyerController::class, 'getAllLawyers']);
         
         // Court Sessions routes
         Route::post('/court-sessions', [CourtSessionController::class, 'store']);
         Route::put('/court-sessions/{id}', [CourtSessionController::class, 'update']);
         Route::delete('/court-sessions/{id}', [CourtSessionController::class, 'destroy']);
         Route::get('/cases/{id}/court-sessions', [CourtSessionController::class, 'getCaseSessions']);
-        Route::get('/lawyer/court-sessions', [CourtSessionController::class, 'getLawyerSessions']);
         
         // Case Attachments routes
         Route::post('/cases/{case_id}/attachments', [CaseAttachmentController::class, 'store']);
