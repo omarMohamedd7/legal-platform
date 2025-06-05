@@ -228,7 +228,7 @@ class AuthController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'user_id' => 'required|exists:users,id',
+                'email' => 'required|email|exists:users,email',
                 'otp' => 'required|string|size:6',
             ]);
             
@@ -240,12 +240,12 @@ class AuthController extends Controller
                 ], 422);
             }
             
-            $user = User::findOrFail($request->user_id);
+            $user = User::where('email', $request->email)->firstOrFail();
             
-            Log::info('Verifying OTP for password reset for user ID: ' . $user->id);
+            Log::info('Verifying OTP for password reset for email: ' . $user->email);
             
             if (!$this->otpService->verifyOtp($user, $request->otp)) {
-                Log::warning('Invalid or expired OTP for user ID: ' . $user->id);
+                Log::warning('Invalid or expired OTP for email: ' . $user->email);
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid or expired OTP'
@@ -261,13 +261,13 @@ class AuthController extends Controller
                 'email_verified_at' => Carbon::now(), // Mark email as verified
             ]);
             
-            Log::info('OTP verified successfully for user ID: ' . $user->id);
+            Log::info('OTP verified successfully for email: ' . $user->email);
             
             return response()->json([
                 'success' => true,
                 'message' => 'OTP verified successfully',
                 'reset_token' => $token,
-                'user_id' => $user->id
+                'email' => $user->email
             ]);
         } catch (\Exception $e) {
             Log::error('Error in verifyResetOtp: ' . $e->getMessage());
@@ -288,19 +288,20 @@ class AuthController extends Controller
     public function resetPassword(Request $request)
     {
         try {
-        $request->validate([
-                'user_id' => 'required|exists:users,id',
+            $request->validate([
+                'email' => 'required|email|exists:users,email',
                 'token' => 'required|string',
-            'password' => ['required', 'confirmed', PasswordRule::defaults()],
-        ]);
+                'newPassword' => ['required', PasswordRule::defaults()],
+                'confirmPassword' => 'required|same:newPassword',
+            ]);
 
-            $user = User::findOrFail($request->user_id);
+            $user = User::where('email', $request->email)->firstOrFail();
             
-            Log::info('Password reset attempted for user ID: ' . $user->id);
+            Log::info('Password reset attempted for email: ' . $user->email);
             
             // Verify that the token matches
             if ($user->remember_token !== $request->token) {
-                Log::warning('Invalid reset token for user ID: ' . $user->id);
+                Log::warning('Invalid reset token for email: ' . $user->email);
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid reset token'
@@ -309,13 +310,13 @@ class AuthController extends Controller
             
             // Update password and clear the token
             $user->update([
-                'password' => Hash::make($request->password),
+                'password' => Hash::make($request->newPassword),
                 'remember_token' => null,
             ]);
             
-            Log::info('Password reset successful for user ID: ' . $user->id);
+            Log::info('Password reset successful for email: ' . $user->email);
 
-                event(new PasswordReset($user));
+            event(new PasswordReset($user));
             
             return response()->json([
                 'success' => true,

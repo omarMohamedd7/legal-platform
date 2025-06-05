@@ -34,6 +34,8 @@ Route::middleware('throttle:standard')->group(function () {
     
     Route::post('/register', [UserController::class, 'store']);
     
+    // Public profile picture upload for registration
+    Route::post('/register/profile-picture', [ProfilePictureController::class, 'uploadForUser']);
     
     
     // Password reset routes
@@ -70,7 +72,8 @@ Route::middleware('throttle:standard')->group(function () {
         Route::get('/lawyers', [LawyerController::class, 'getAllLawyers']);
         
         // Profile Picture routes
-       
+        Route::post('/profile-picture', [ProfilePictureController::class, 'upload']);
+        Route::delete('/profile-picture', [ProfilePictureController::class, 'delete']);
         
         // طلبات التوكيل المباشر (Direct Case Requests)
         Route::post('/case-requests', [CaseRequestController::class, 'store']);

@@ -78,13 +78,13 @@ class ProfilePictureController extends Controller
     }
     
     /**
-     * Upload a profile picture for a specific user (admin functionality)
+     * Upload a profile picture for a specific user or return a temporary URL for registration
      *
      * @param Request $request
-     * @param int $userId
+     * @param int|null $userId
      * @return \Illuminate\Http\JsonResponse
      */
-    public function uploadForUser(Request $request, $userId)
+    public function uploadForUser(Request $request, $userId = null)
     {
         // Validate the request
         $validator = Validator::make($request->all(), [
@@ -100,22 +100,49 @@ class ProfilePictureController extends Controller
         }
 
         try {
-            // Get the user
-            $user = User::findOrFail($userId);
-            
             // Handle the file upload
             if ($request->hasFile('profile_picture')) {
                 $image = $request->file('profile_picture');
                 
-                // Use the service to upload the profile picture
-                $result = $this->profilePictureService->upload($user, $image);
-                
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Profile picture uploaded successfully',
-                    'profile_image_url' => $result['full_url'],
-                    'relative_path' => $result['relative_path']
-                ]);
+                if ($userId) {
+                    // If user ID is provided, find the user and update their profile picture
+                    $user = User::findOrFail($userId);
+                    $result = $this->profilePictureService->upload($user, $image);
+                    
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Profile picture uploaded successfully',
+                        'profile_image_url' => $result['full_url'],
+                        'relative_path' => $result['relative_path']
+                    ]);
+                } else {
+                    // For registration: just upload the file and return the path
+                    // Create a unique filename
+                    $filename = time() . '_registration.' . $image->getClientOriginalExtension();
+                    
+                    // Ensure the directory exists
+                    $uploadPath = public_path('profile_pics');
+                    if (!file_exists($uploadPath)) {
+                        if (!mkdir($uploadPath, 0755, true)) {
+                            throw new \Exception("Failed to create directory: $uploadPath");
+                        }
+                    }
+                    
+                    // Move the file
+                    if (!$image->move($uploadPath, $filename)) {
+                        throw new \Exception("Failed to move uploaded file");
+                    }
+                    
+                    $relativePath = 'profile_pics/' . $filename;
+                    $fullUrl = url($relativePath);
+                    
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Profile picture uploaded successfully',
+                        'profile_image_url' => $fullUrl,
+                        'relative_path' => $relativePath
+                    ]);
+                }
             }
             
             return response()->json([

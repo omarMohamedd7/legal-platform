@@ -19,8 +19,18 @@ class ProfilePictureService
         // Create a unique filename
         $filename = time() . '_' . $user->id . '.' . $file->getClientOriginalExtension();
         
+        // Ensure the directory exists
+        $uploadPath = public_path('profile_pics');
+        if (!file_exists($uploadPath)) {
+            if (!mkdir($uploadPath, 0755, true)) {
+                throw new \Exception("Failed to create directory: $uploadPath");
+            }
+        }
+        
         // Move the file to the public/profile_pics directory
-        $file->move(public_path('profile_pics'), $filename);
+        if (!$file->move($uploadPath, $filename)) {
+            throw new \Exception("Failed to move uploaded file");
+        }
         
         // Store the relative path in the database
         $relativePath = 'profile_pics/' . $filename;

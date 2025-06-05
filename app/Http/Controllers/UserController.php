@@ -24,16 +24,22 @@ class UserController extends Controller
     public function store(Request $request)
     {
         try {
+            \Illuminate\Support\Facades\Log::info('Registration attempt', [
+                'has_file' => $request->hasFile('profile_picture'),
+                'content_type' => $request->header('Content-Type'),
+                'all_files' => $request->allFiles(),
+                'all_inputs' => $request->except(['profile_picture', 'password'])
+            ]);
+            
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
                 'email' => 'required|string|email|max:255|unique:users',
                 'password' => 'required|string|min:6',
                 'role' => ['required', Rule::in(['client', 'lawyer', 'judge'])],
                 'city' => 'nullable|string|max:255',
-                'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Changed from profile_image to profile_picture
-                'profile_image_url' => 'nullable|string', // Also allow string URL if provided directly
-                'phone_number' => 'nullable|string|max:20', // فقط للـ client و lawyer
-                'specialization' => 'nullable|string|max:255', // فقط للقاضي
+                'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'phone_number' => 'nullable|string|max:20',
+                'specialization' => 'nullable|string|max:255',
                 'court_name' => 'nullable|string|max:255',
                 'consult_fee' => 'nullable|numeric|min:0',
             ]);
@@ -41,19 +47,40 @@ class UserController extends Controller
             // Handle profile image upload if provided
             $profileImageUrl = null;
             if ($request->hasFile('profile_picture')) {
-                $image = $request->file('profile_picture');
-                $filename = time() . '.' . $image->getClientOriginalExtension();
-                
-                // Ensure directory exists
-                $uploadPath = public_path('uploads/profile_images');
-                if (!file_exists($uploadPath)) {
-                    mkdir($uploadPath, 0755, true);
+                try {
+                    $image = $request->file('profile_picture');
+                    \Illuminate\Support\Facades\Log::info('Processing profile image', [
+                        'original_name' => $image->getClientOriginalName(),
+                        'mime_type' => $image->getClientMimeType(),
+                        'size' => $image->getSize()
+                    ]);
+                    
+                    $filename = time() . '.' . $image->getClientOriginalExtension();
+                    
+                    // Ensure directory exists
+                    $uploadPath = public_path('uploads/profile_images');
+                    if (!file_exists($uploadPath)) {
+                        if (!mkdir($uploadPath, 0755, true)) {
+                            throw new \Exception("Failed to create directory: $uploadPath");
+                        }
+                    }
+                    
+                    // Move the file
+                    $image->move($uploadPath, $filename);
+                    
+                    $profileImageUrl = 'uploads/profile_images/' . $filename;
+                    \Illuminate\Support\Facades\Log::info('Image uploaded successfully', [
+                        'path' => $profileImageUrl
+                    ]);
+                } catch (\Exception $e) {
+                    // Log the error but continue with registration without the image
+                    \Illuminate\Support\Facades\Log::error('Profile image upload failed: ' . $e->getMessage(), [
+                        'exception' => $e
+                    ]);
+                    // Continue with registration without the profile image
                 }
-                
-                $image->move($uploadPath, $filename);
-                $profileImageUrl = 'uploads/profile_images/' . $filename;
-            } elseif (isset($validated['profile_image_url'])) {
-                $profileImageUrl = $validated['profile_image_url'];
+            } else {
+                \Illuminate\Support\Facades\Log::info('No profile picture provided in request');
             }
     
             $user = User::create([
@@ -62,6 +89,11 @@ class UserController extends Controller
                 'password' => Hash::make($validated['password']),
                 'role' => $validated['role'],
                 'profile_image_url' => $profileImageUrl,
+            ]);
+            
+            \Illuminate\Support\Facades\Log::info('User created', [
+                'user_id' => $user->id,
+                'profile_image_url' => $user->profile_image_url
             ]);
     
             if ($validated['role'] === 'client') {
@@ -98,11 +130,19 @@ class UserController extends Controller
             } elseif ($validated['role'] === 'judge') {
                 $user->load('judge');
             }
+            
+            // Refresh user to get updated data
+            $user = $user->fresh();
     
             return (new UserResource($user))
                 ->withMessage('User registered successfully');
                 
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Registration failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Registration failed',
@@ -129,8 +169,8 @@ class UserController extends Controller
             'password' => 'nullable|string|min:6',
             'role' => ['sometimes', Rule::in(['client', 'lawyer', 'judge'])],
             'city' => 'nullable|string|max:255',
-            'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Accept image file
-            'profile_image_url' => 'nullable|string', // Also allow string URL if provided directly
+            'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'profile_image_url' => 'nullable|string',
         ]);
 
         if (isset($validated['password'])) {
@@ -141,10 +181,30 @@ class UserController extends Controller
         
         // Handle profile image upload if provided
         if ($request->hasFile('profile_image')) {
-            $image = $request->file('profile_image');
-            $filename = time() . '.' . $image->getClientOriginalExtension();
-            $image->move(public_path('uploads/profile_images'), $filename);
-            $validated['profile_image_url'] = 'uploads/profile_images/' . $filename;
+            try {
+                $image = $request->file('profile_image');
+                $filename = time() . '.' . $image->getClientOriginalExtension();
+                
+                // Ensure directory exists
+                $uploadPath = public_path('uploads/profile_images');
+                if (!file_exists($uploadPath)) {
+                    if (!mkdir($uploadPath, 0755, true)) {
+                        throw new \Exception("Failed to create directory: $uploadPath");
+                    }
+                }
+                
+                // Move the file
+                if (!$image->move($uploadPath, $filename)) {
+                    throw new \Exception("Failed to move uploaded file");
+                }
+                
+                $validated['profile_image_url'] = 'uploads/profile_images/' . $filename;
+            } catch (\Exception $e) {
+                // Log the error but continue with update without the image
+                \Illuminate\Support\Facades\Log::error('Profile image upload failed: ' . $e->getMessage());
+                // Continue with update without changing the profile image
+                unset($validated['profile_image_url']);
+            }
         }
 
         $user->update($validated);
