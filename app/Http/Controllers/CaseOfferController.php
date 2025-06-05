@@ -237,4 +237,115 @@ class CaseOfferController extends Controller
         
         return response()->json($offer);
     }
+
+    /**
+     * الحصول على كل العروض المقدمة على قضايا العميل المنشورة
+     * Get all offers submitted to the client's published cases
+     */
+    public function getClientCaseOffers(Request $request)
+    {
+        try {
+            $user = Auth::user();
+            
+            if (!$user || $user->role !== 'client') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'غير مصرح. يمكن للعملاء فقط عرض العروض المقدمة على قضاياهم.'
+                ], 403);
+            }
+            
+            $client = $user->client;
+            
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'لم يتم العثور على ملف العميل.'
+                ], 404);
+            }
+            
+            // Validate query parameters
+            $validated = $request->validate([
+                'published_case_id' => 'nullable|integer|exists:published_cases,published_case_id',
+                'status' => 'nullable|in:Pending,Accepted,Rejected',
+                'per_page' => 'nullable|integer|min:1|max:50',
+            ]);
+            
+            // Get all published cases for this client
+            $query = CaseOffer::with([
+                'lawyer.user', 
+                'publishedCase.legalCase'
+            ])
+            ->whereHas('publishedCase', function($query) use ($client) {
+                $query->where('client_id', $client->client_id);
+            });
+            
+            // Filter by published case if specified
+            if (isset($validated['published_case_id'])) {
+                $query->where('published_case_id', $validated['published_case_id']);
+            }
+            
+            // Filter by status if specified
+            if (isset($validated['status'])) {
+                $query->where('status', $validated['status']);
+            }
+            
+            // Get paginated results
+            $perPage = $validated['per_page'] ?? 10;
+            $offers = $query->orderBy('created_at', 'desc')->paginate($perPage);
+            
+            // Format response data
+            $formattedOffers = $offers->map(function($offer) {
+                return [
+                    'offer_id' => $offer->offer_id,
+                    'status' => $offer->status,
+                    'expected_price' => $offer->expected_price,
+                    'message' => $offer->message,
+                    'created_at' => $offer->created_at,
+                    'updated_at' => $offer->updated_at,
+                    'lawyer' => [
+                        'lawyer_id' => $offer->lawyer->lawyer_id,
+                        'name' => $offer->lawyer->user->name,
+                        'email' => $offer->lawyer->user->email,
+                        'profile_image_url' => $offer->lawyer->user->profile_image_url ? url($offer->lawyer->user->profile_image_url) : null,
+                        'specialization' => $offer->lawyer->specialization,
+                        'city' => $offer->lawyer->city,
+                        'consult_fee' => $offer->lawyer->consult_fee,
+                    ],
+                    'published_case' => [
+                        'published_case_id' => $offer->publishedCase->published_case_id,
+                        'status' => $offer->publishedCase->status,
+                        'case' => [
+                            'case_id' => $offer->publishedCase->legalCase->case_id,
+                            'case_number' => $offer->publishedCase->legalCase->case_number,
+                            'case_type' => $offer->publishedCase->legalCase->case_type,
+                            'plaintiff_name' => $offer->publishedCase->legalCase->plaintiff_name,
+                            'defendant_name' => $offer->publishedCase->legalCase->defendant_name,
+                            'description' => $offer->publishedCase->legalCase->description,
+                            'status' => $offer->publishedCase->legalCase->status,
+                        ]
+                    ]
+                ];
+            });
+            
+            return response()->json([
+                'success' => true,
+                'data' => $formattedOffers,
+                'pagination' => [
+                    'current_page' => $offers->currentPage(),
+                    'last_page' => $offers->lastPage(),
+                    'per_page' => $offers->perPage(),
+                    'total' => $offers->total()
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error getting client case offers: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب العروض.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 } 

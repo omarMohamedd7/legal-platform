@@ -30,7 +30,7 @@ class UserController extends Controller
                 'password' => 'required|string|min:6',
                 'role' => ['required', Rule::in(['client', 'lawyer', 'judge'])],
                 'city' => 'nullable|string|max:255',
-                'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Accept image file
+                'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Changed from profile_image to profile_picture
                 'profile_image_url' => 'nullable|string', // Also allow string URL if provided directly
                 'phone_number' => 'nullable|string|max:20', // فقط للـ client و lawyer
                 'specialization' => 'nullable|string|max:255', // فقط للقاضي
@@ -40,10 +40,17 @@ class UserController extends Controller
             
             // Handle profile image upload if provided
             $profileImageUrl = null;
-            if ($request->hasFile('profile_image')) {
-                $image = $request->file('profile_image');
+            if ($request->hasFile('profile_picture')) {
+                $image = $request->file('profile_picture');
                 $filename = time() . '.' . $image->getClientOriginalExtension();
-                $image->move(public_path('uploads/profile_images'), $filename);
+                
+                // Ensure directory exists
+                $uploadPath = public_path('uploads/profile_images');
+                if (!file_exists($uploadPath)) {
+                    mkdir($uploadPath, 0755, true);
+                }
+                
+                $image->move($uploadPath, $filename);
                 $profileImageUrl = 'uploads/profile_images/' . $filename;
             } elseif (isset($validated['profile_image_url'])) {
                 $profileImageUrl = $validated['profile_image_url'];
