@@ -7,6 +7,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\LawyerController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\JudgeController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\LegalCaseController;
 use App\Http\Controllers\CaseRequestController;
 use App\Http\Controllers\PublishedCaseController;
@@ -65,6 +66,9 @@ Route::middleware('throttle:standard')->group(function () {
         Route::post('/profile-picture', [ProfilePictureController::class, 'upload']);
         Route::delete('/profile-picture', [ProfilePictureController::class, 'delete']);
         
+        // Common profile update route for all user types
+        Route::put('/update-profile', [ProfileController::class, 'updateProfile']);
+        
         // Client routes
         Route::prefix('client')->group(function () {
             Route::get('/case-requests', [CaseRequestController::class, 'getClientRequests']);
@@ -84,6 +88,16 @@ Route::middleware('throttle:standard')->group(function () {
             Route::get('/cases', [LawyerController::class, 'getCases']);
             Route::get('/court-sessions', [CourtSessionController::class, 'getLawyerSessions']);
             Route::put('/update-profile', [LawyerController::class, 'updateOwnProfile']);
+        });
+        
+        // Judge routes
+        Route::prefix('judge')->group(function () {
+            Route::get('/tasks', [JudgeTaskController::class, 'index']);
+            Route::post('/tasks', [JudgeTaskController::class, 'store']);
+            Route::put('/tasks/{id}', [JudgeTaskController::class, 'update']);
+            Route::delete('/tasks/{id}', [JudgeTaskController::class, 'destroy']);
+            Route::patch('/tasks/{id}/complete', [JudgeTaskController::class, 'markAsCompleted']);
+            Route::put('/update-profile', [JudgeController::class, 'updateOwnProfile']);
         });
         
         // طلبات التوكيل المباشر (Direct Case Requests)
@@ -130,13 +144,6 @@ Route::middleware('throttle:standard')->group(function () {
         Route::get('/chats/{id}/messages', [ChatController::class, 'getMessages']);
         Route::post('/chats/{id}/messages', [ChatController::class, 'sendMessage']);
         Route::post('/chats/{id}/close', [ChatController::class, 'closeChat']);
-        
-        // Judge Tasks routes
-        Route::get('/judge/tasks', [JudgeTaskController::class, 'index']);
-        Route::post('/judge/tasks', [JudgeTaskController::class, 'store']);
-        Route::put('/judge/tasks/{id}', [JudgeTaskController::class, 'update']);
-        Route::delete('/judge/tasks/{id}', [JudgeTaskController::class, 'destroy']);
-        Route::patch('/judge/tasks/{id}/complete', [JudgeTaskController::class, 'markAsCompleted']);
 
         // Video Analysis routes (Judges only)
         Route::post('/video-analyses', [VideoAnalysisController::class, 'store']);

@@ -12,6 +12,7 @@ use App\Models\Lawyer;
 use App\Models\Judge;
 use App\Http\Resources\UserResource;
 use App\Http\Resources\UserCollection;
+use Illuminate\Support\Facades\DB;
 
 class UserController extends Controller
 {
@@ -36,10 +37,20 @@ class UserController extends Controller
                 'email' => 'required|string|email|max:255|unique:users',
                 'password' => 'required|string|min:6',
                 'role' => ['required', Rule::in(['client', 'lawyer', 'judge'])],
-                'city' => 'nullable|string|max:255',
+                'city' => [
+                    'nullable', 
+                    'string',
+                    'max:255',
+                    Rule::requiredIf(fn() => $request->input('role') === 'lawyer')
+                ],
                 'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
                 'phone_number' => 'nullable|string|max:20',
-                'specialization' => 'nullable|string|max:255',
+                'specialization' => [
+                    'nullable', 
+                    'string',
+                    Rule::requiredIf(fn() => $request->input('role') === 'lawyer'),
+                    Rule::in(['Family Law', 'Civil Law', 'Criminal Law', 'Commercial Law', 'International Law'])
+                ],
                 'court_name' => 'nullable|string|max:255',
                 'consult_fee' => 'nullable|numeric|min:0',
             ]);
@@ -48,27 +59,27 @@ class UserController extends Controller
             $profileImageUrl = null;
             if ($request->hasFile('profile_picture')) {
                 try {
-                    $image = $request->file('profile_picture');
+                $image = $request->file('profile_picture');
                     \Illuminate\Support\Facades\Log::info('Processing profile image', [
                         'original_name' => $image->getClientOriginalName(),
                         'mime_type' => $image->getClientMimeType(),
                         'size' => $image->getSize()
                     ]);
                     
-                    $filename = time() . '.' . $image->getClientOriginalExtension();
-                    
-                    // Ensure directory exists
-                    $uploadPath = public_path('uploads/profile_images');
-                    if (!file_exists($uploadPath)) {
+                $filename = time() . '.' . $image->getClientOriginalExtension();
+                
+                // Ensure directory exists
+                $uploadPath = public_path('uploads/profile_images');
+                if (!file_exists($uploadPath)) {
                         if (!mkdir($uploadPath, 0755, true)) {
                             throw new \Exception("Failed to create directory: $uploadPath");
                         }
-                    }
-                    
+                }
+                
                     // Move the file
-                    $image->move($uploadPath, $filename);
+                $image->move($uploadPath, $filename);
                     
-                    $profileImageUrl = 'uploads/profile_images/' . $filename;
+                $profileImageUrl = 'uploads/profile_images/' . $filename;
                     \Illuminate\Support\Facades\Log::info('Image uploaded successfully', [
                         'path' => $profileImageUrl
                     ]);
@@ -83,59 +94,77 @@ class UserController extends Controller
                 \Illuminate\Support\Facades\Log::info('No profile picture provided in request');
             }
     
-            $user = User::create([
-                'name' => $validated['name'],
-                'email' => $validated['email'],
-                'password' => Hash::make($validated['password']),
-                'role' => $validated['role'],
-                'profile_image_url' => $profileImageUrl,
-            ]);
-            
-            \Illuminate\Support\Facades\Log::info('User created', [
-                'user_id' => $user->id,
-                'profile_image_url' => $user->profile_image_url
-            ]);
-    
-            if ($validated['role'] === 'client') {
-                Client::create([
-                    'user_id' => $user->id,
-                    'phone_number' => $validated['phone_number'] ?? null,
-                    'city' => $validated['city'] ?? null,
+            // Use a database transaction to ensure atomicity
+            return DB::transaction(function () use ($validated, $profileImageUrl) {
+                $user = User::create([
+                    'name' => $validated['name'],
+                    'email' => $validated['email'],
+                    'password' => Hash::make($validated['password']),
+                    'role' => $validated['role'],
+                    'profile_image_url' => $profileImageUrl,
                 ]);
-            }
-    
-            if ($validated['role'] === 'lawyer') {
-                Lawyer::create([
+                
+                \Illuminate\Support\Facades\Log::info('User created', [
                     'user_id' => $user->id,
-                    'phone_number' => $validated['phone_number'] ?? null,
-                    'specialization' => $validated['specialization'] ?? null,
-                    'consult_fee' => $validated['consult_fee'] ?? null,
-                    'city' => $validated['city'] ?? null,
+                    'profile_image_url' => $user->profile_image_url
                 ]);
-            }
-    
-            if ($validated['role'] === 'judge') {
-                Judge::create([
-                    'user_id' => $user->id,
-                    'specialization' => $validated['specialization'] ?? null,
-                    'court_name' => $validated['court_name'] ?? null,
-                ]);
-            }
-    
-            // Load the appropriate relationship based on user role
-            if ($validated['role'] === 'client') {
-                $user->load('client');
-            } elseif ($validated['role'] === 'lawyer') {
-                $user->load('lawyer');
-            } elseif ($validated['role'] === 'judge') {
-                $user->load('judge');
-            }
-            
-            // Refresh user to get updated data
-            $user = $user->fresh();
-    
-            return (new UserResource($user))
-                ->withMessage('User registered successfully');
+        
+                if ($validated['role'] === 'client') {
+                    Client::create([
+                        'user_id' => $user->id,
+                        'phone_number' => $validated['phone_number'] ?? null,
+                        'city' => $validated['city'] ?? null,
+                    ]);
+                }
+        
+                if ($validated['role'] === 'lawyer') {
+                    // Make sure we have the required fields for a lawyer
+                    if (!isset($validated['specialization']) || !isset($validated['city'])) {
+                        throw new \Illuminate\Validation\ValidationException(
+                            Validator::make([], []), 
+                            response()->json([
+                                'success' => false,
+                                'message' => 'Specialization and city are required for lawyers',
+                                'errors' => [
+                                    'specialization' => ['Specialization is required for lawyers'],
+                                    'city' => ['City is required for lawyers']
+                                ]
+                            ], 422)
+                        );
+                    }
+                    
+                    Lawyer::create([
+                        'user_id' => $user->id,
+                        'phone_number' => $validated['phone_number'] ?? null,
+                        'specialization' => $validated['specialization'],
+                        'consult_fee' => $validated['consult_fee'] ?? 0,
+                        'city' => $validated['city'],
+                    ]);
+                }
+        
+                if ($validated['role'] === 'judge') {
+                    Judge::create([
+                        'user_id' => $user->id,
+                        'specialization' => $validated['specialization'] ?? null,
+                        'court_name' => $validated['court_name'] ?? null,
+                    ]);
+                }
+        
+                // Load the appropriate relationship based on user role
+                if ($validated['role'] === 'client') {
+                    $user->load('client');
+                } elseif ($validated['role'] === 'lawyer') {
+                    $user->load('lawyer');
+                } elseif ($validated['role'] === 'judge') {
+                    $user->load('judge');
+                }
+                
+                // Refresh user to get updated data
+                $user = $user->fresh();
+        
+                return (new UserResource($user))
+                    ->withMessage('User registered successfully');
+            });
                 
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Registration failed', [
@@ -182,8 +211,8 @@ class UserController extends Controller
         // Handle profile image upload if provided
         if ($request->hasFile('profile_image')) {
             try {
-                $image = $request->file('profile_image');
-                $filename = time() . '.' . $image->getClientOriginalExtension();
+            $image = $request->file('profile_image');
+            $filename = time() . '.' . $image->getClientOriginalExtension();
                 
                 // Ensure directory exists
                 $uploadPath = public_path('uploads/profile_images');
@@ -198,7 +227,7 @@ class UserController extends Controller
                     throw new \Exception("Failed to move uploaded file");
                 }
                 
-                $validated['profile_image_url'] = 'uploads/profile_images/' . $filename;
+            $validated['profile_image_url'] = 'uploads/profile_images/' . $filename;
             } catch (\Exception $e) {
                 // Log the error but continue with update without the image
                 \Illuminate\Support\Facades\Log::error('Profile image upload failed: ' . $e->getMessage());

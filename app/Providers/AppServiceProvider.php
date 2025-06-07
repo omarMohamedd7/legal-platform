@@ -25,5 +25,15 @@ class AppServiceProvider extends ServiceProvider
         // Make sure API resources don't wrap data in a 'data' key by default
         // Our BaseResource takes care of the wrapping
         JsonResource::withoutWrapping();
+
+        // Handle authentication exceptions for API requests
+        $this->app->singleton(
+            \Illuminate\Auth\AuthenticationException::class,
+            function ($app) {
+                return new \Illuminate\Auth\AuthenticationException(
+                    'Unauthenticated. Please login to continue.'
+                );
+            }
+        );
     }
 }

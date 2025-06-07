@@ -288,12 +288,12 @@ class AuthController extends Controller
     public function resetPassword(Request $request)
     {
         try {
-            $request->validate([
+        $request->validate([
                 'email' => 'required|email|exists:users,email',
                 'token' => 'required|string',
                 'newPassword' => ['required', PasswordRule::defaults()],
                 'confirmPassword' => 'required|same:newPassword',
-            ]);
+        ]);
 
             $user = User::where('email', $request->email)->firstOrFail();
             
@@ -316,7 +316,7 @@ class AuthController extends Controller
             
             Log::info('Password reset successful for email: ' . $user->email);
 
-            event(new PasswordReset($user));
+                event(new PasswordReset($user));
             
             return response()->json([
                 'success' => true,
