@@ -12,7 +12,6 @@ use App\Http\Controllers\LegalCaseController;
 use App\Http\Controllers\CaseRequestController;
 use App\Http\Controllers\PublishedCaseController;
 use App\Http\Controllers\CaseOfferController;
-use App\Http\Controllers\CourtSessionController;
 use App\Http\Controllers\LegalBookController;
 use App\Http\Controllers\VideoAnalysisController;
 use App\Http\Controllers\CaseAttachmentController;
@@ -86,7 +85,6 @@ Route::middleware('throttle:standard')->group(function () {
             Route::get('/case-offers', [CaseOfferController::class, 'getLawyerOffers']);
             Route::get('/clients-cases', [LawyerController::class, 'getClientsCases']);
             Route::get('/cases', [LawyerController::class, 'getCases']);
-            Route::get('/court-sessions', [CourtSessionController::class, 'getLawyerSessions']);
             Route::put('/update-profile', [LawyerController::class, 'updateOwnProfile']);
         });
         
@@ -114,12 +112,6 @@ Route::middleware('throttle:standard')->group(function () {
         
         // Lawyers listing routes
         Route::get('/lawyers', [LawyerController::class, 'getAllLawyers']);
-        
-        // Court Sessions routes
-        Route::post('/court-sessions', [CourtSessionController::class, 'store']);
-        Route::put('/court-sessions/{id}', [CourtSessionController::class, 'update']);
-        Route::delete('/court-sessions/{id}', [CourtSessionController::class, 'destroy']);
-        Route::get('/cases/{id}/court-sessions', [CourtSessionController::class, 'getCaseSessions']);
         
         // Case Attachments routes
         Route::post('/cases/{case_id}/attachments', [CaseAttachmentController::class, 'store']);
