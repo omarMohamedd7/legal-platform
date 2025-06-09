@@ -57,52 +57,68 @@ class AuthController extends Controller
             ], 401);
         }
     
-        // Generate and send OTP
+        // إذا كان البريد موثّقًا، تجاوز خطوة OTP
+        if ($user->email_verified_at) {
+            $token = $user->createToken('auth_token')->plainTextToken;
+            return (new UserResource($user))
+                ->withMessage('Login successful')
+                ->additional([
+                    'token' => $token
+                ]);
+        }
+    
+        // إذا لم يكن موثّقًا، إرسال OTP لمرة واحدة
         $otp = $this->otpService->generateOtp($user);
         $this->otpService->sendOtpEmail($user, $otp, 'authentication');
     
         return response()->json([
             'success' => true,
-            'message' => 'OTP sent to your email',
+            'message' => 'OTP sent to your email for verification',
             'email' => $user->email,
             'requires_otp' => true
         ]);
     }
-    
     // تسجيل الدخول - Step 2: Verify OTP and complete login
     public function verifyLoginOtp(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|email|exists:users,email',
-            'otp' => 'required|string|size:6',
-        ]);
-        
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-        
-        $user = User::where('email', $request->email)->firstOrFail();
-        
-        if (!$this->otpService->verifyOtp($user, $request->otp)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid or expired OTP'
-            ], 401);
-        }
-        
-        // OTP verified, create token and complete login
-        $token = $user->createToken('auth_token')->plainTextToken;
-    
-        return (new UserResource($user))
-            ->withMessage('Login successful')
-            ->additional([
-                'token' => $token
-            ]);
+{
+    $validator = Validator::make($request->all(), [
+        'email' => 'required|email|exists:users,email',
+        'otp' => 'required|string|size:6',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Validation failed',
+            'errors' => $validator->errors()
+        ], 422);
     }
+
+    $user = User::where('email', $request->email)->firstOrFail();
+
+    if (!$this->otpService->verifyOtp($user, $request->otp)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid or expired OTP'
+        ], 401);
+    }
+
+    // تحديث email_verified_at إن لم يكن موثّقًا
+    if (!$user->email_verified_at) {
+        $user->update([
+            'email_verified_at' => Carbon::now(),
+        ]);
+    }
+
+    // OTP verified, create token and complete login
+    $token = $user->createToken('auth_token')->plainTextToken;
+
+    return (new UserResource($user))
+        ->withMessage('Login successful')
+        ->additional([
+            'token' => $token
+        ]);
+}
     
     // Resend OTP if expired
     public function resendOtp(Request $request)
