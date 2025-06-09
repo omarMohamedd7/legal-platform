@@ -7,11 +7,11 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Run the migrations in the correct order to ensure foreign key constraints are properly satisfied.
+     * Run the migrations.
      */
     public function up(): void
     {
-        // 1. First create users table as many tables depend on it
+        // 1. Create users table
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('name');
@@ -22,19 +22,21 @@ return new class extends Migration
             $table->string('otp', 6)->nullable();
             $table->timestamp('otp_expires_at')->nullable();
             $table->timestamp('email_verified_at')->nullable();
+            $table->string('fcm_token')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });
-        
+
         // 2. Create clients table
         Schema::create('clients', function (Blueprint $table) {
             $table->id('client_id');
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
             $table->string('city')->nullable();
             $table->string('phone_number')->nullable();
+            $table->string('fcm_token')->nullable();
             $table->timestamps();
         });
-        
+
         // 3. Create lawyers table
         Schema::create('lawyers', function (Blueprint $table) {
             $table->id('lawyer_id');
@@ -46,7 +48,7 @@ return new class extends Migration
             $table->decimal('consult_fee', 10, 2)->default(0);
             $table->timestamps();
         });
-        
+
         // 4. Create judges table
         Schema::create('judges', function (Blueprint $table) {
             $table->id('judge_id');
@@ -55,7 +57,7 @@ return new class extends Migration
             $table->string('specialization')->nullable();
             $table->timestamps();
         });
-        
+
         // 5. Create cases table
         Schema::create('cases', function (Blueprint $table) {
             $table->id('case_id');
@@ -64,14 +66,14 @@ return new class extends Migration
             $table->string('defendant_name')->nullable();
             $table->enum('case_type', ['Family Law', 'Civil Law', 'Criminal Law', 'Commercial Law', 'International Law']);
             $table->text('description')->nullable();
-            $table->enum('status', ['Pending', 'Active', 'Closed',])->default('Pending');
+            $table->enum('status', ['Pending', 'Active', 'Closed'])->default('Pending');
             $table->json('attachments')->nullable();
             $table->foreignId('created_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('assigned_lawyer_id')->nullable()->constrained('lawyers', 'lawyer_id')->nullOnDelete();
             $table->timestamps();
         });
-        
-        // 6. Create published cases table
+
+        // 6. Create published_cases table
         Schema::create('published_cases', function (Blueprint $table) {
             $table->id('published_case_id');
             $table->foreignId('case_id')->constrained('cases', 'case_id')->onDelete('cascade');
@@ -81,7 +83,7 @@ return new class extends Migration
             $table->enum('target_specialization', ['Family Law', 'Civil Law', 'Criminal Law', 'Commercial Law', 'International Law']);
             $table->timestamps();
         });
-        
+
         // 7. Create case_offers table
         Schema::create('case_offers', function (Blueprint $table) {
             $table->id('offer_id');
@@ -92,7 +94,7 @@ return new class extends Migration
             $table->enum('status', ['Pending', 'Accepted', 'Rejected'])->default('Pending');
             $table->timestamps();
         });
-        
+
         // 8. Create case_requests table
         Schema::create('case_requests', function (Blueprint $table) {
             $table->id('request_id');
@@ -103,7 +105,7 @@ return new class extends Migration
             $table->enum('status', ['Pending', 'Accepted', 'Rejected'])->default('Pending');
             $table->timestamps();
         });
-        
+
         // 9. Create court_sessions table
         Schema::create('court_sessions', function (Blueprint $table) {
             $table->id('session_id');
@@ -118,7 +120,7 @@ return new class extends Migration
             $table->foreignId('added_by_id')->constrained('users')->onDelete('cascade');
             $table->timestamps();
         });
-        
+
         // 10. Create legal_books table
         Schema::create('legal_books', function (Blueprint $table) {
             $table->id();
@@ -130,7 +132,7 @@ return new class extends Migration
             $table->string('image_path')->nullable();
             $table->timestamps();
         });
-        
+
         // 11. Create video_analyses table
         Schema::create('video_analyses', function (Blueprint $table) {
             $table->id();
@@ -141,7 +143,7 @@ return new class extends Migration
             $table->text('notes')->nullable();
             $table->timestamps();
         });
-        
+
         // 12. Create consultation_requests table
         Schema::create('consultation_requests', function (Blueprint $table) {
             $table->id();
@@ -151,7 +153,7 @@ return new class extends Migration
             $table->enum('status', ['pending', 'paid', 'cancelled'])->default('pending');
             $table->timestamps();
         });
-        
+
         // 13. Create payments table
         Schema::create('payments', function (Blueprint $table) {
             $table->id('payment_id');
@@ -162,7 +164,7 @@ return new class extends Migration
             $table->string('transaction_id')->nullable();
             $table->timestamps();
         });
-        
+
         // 14. Create judge_tasks table
         Schema::create('judge_tasks', function (Blueprint $table) {
             $table->id();
@@ -176,10 +178,8 @@ return new class extends Migration
             $table->enum('status', ['pending', 'completed'])->default('pending');
             $table->timestamps();
         });
-        
-        // 15. Create Laravel system tables
-        
-        // Personal access tokens table
+
+        // 15. Laravel system tables
         Schema::create('personal_access_tokens', function (Blueprint $table) {
             $table->id();
             $table->morphs('tokenable');
@@ -190,8 +190,7 @@ return new class extends Migration
             $table->timestamp('expires_at')->nullable();
             $table->timestamps();
         });
-        
-        // Cache tables
+
         Schema::create('cache', function (Blueprint $table) {
             $table->string('key')->primary();
             $table->mediumText('value');
@@ -203,8 +202,7 @@ return new class extends Migration
             $table->string('owner');
             $table->integer('expiration');
         });
-        
-        // Jobs tables
+
         Schema::create('jobs', function (Blueprint $table) {
             $table->id();
             $table->string('queue')->index();
@@ -244,7 +242,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Drop tables in reverse order to avoid foreign key constraint issues
         Schema::dropIfExists('failed_jobs');
         Schema::dropIfExists('job_batches');
         Schema::dropIfExists('jobs');
@@ -266,4 +263,4 @@ return new class extends Migration
         Schema::dropIfExists('clients');
         Schema::dropIfExists('users');
     }
-}; 
+};

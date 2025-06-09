@@ -57,27 +57,29 @@ class AuthController extends Controller
             ], 401);
         }
     
-        // إذا كان البريد موثّقًا، تجاوز خطوة OTP
-        if ($user->email_verified_at) {
-            $token = $user->createToken('auth_token')->plainTextToken;
-            return (new UserResource($user))
-                ->withMessage('Login successful')
-                ->additional([
-                    'token' => $token
-                ]);
+        // إذا كان البريد غير موثّق، نرسل OTP ونرجع 403
+        if (!$user->email_verified_at) {
+            $otp = $this->otpService->generateOtp($user);
+            $this->otpService->sendOtpEmail($user, $otp, 'authentication');
+    
+            return response()->json([
+                'success' => false,
+                'message' => 'Your account is not verified. OTP has been sent to your email.',
+                'email' => $user->email,
+                'requires_otp' => true
+            ], 403);
         }
     
-        // إذا لم يكن موثّقًا، إرسال OTP لمرة واحدة
-        $otp = $this->otpService->generateOtp($user);
-        $this->otpService->sendOtpEmail($user, $otp, 'authentication');
+        // البريد موثّق، تسجيل الدخول
+        $token = $user->createToken('auth_token')->plainTextToken;
     
-        return response()->json([
-            'success' => true,
-            'message' => 'OTP sent to your email for verification',
-            'email' => $user->email,
-            'requires_otp' => true
-        ]);
+        return (new UserResource($user))
+            ->withMessage('Login successful')
+            ->additional([
+                'token' => $token
+            ]);
     }
+    
     // تسجيل الدخول - Step 2: Verify OTP and complete login
     public function verifyLoginOtp(Request $request)
 {
