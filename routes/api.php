@@ -8,18 +8,18 @@ use App\Http\Controllers\LawyerController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\JudgeController;
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\LegalCaseController;
 use App\Http\Controllers\CaseRequestController;
 use App\Http\Controllers\PublishedCaseController;
 use App\Http\Controllers\CaseOfferController;
 use App\Http\Controllers\LegalBookController;
 use App\Http\Controllers\VideoAnalysisController;
-use App\Http\Controllers\CaseAttachmentController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\JudgeTaskController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ProfilePictureController;
+use App\Http\Controllers\LegalCaseController;
+use App\Http\Controllers\CaseAttachmentController;
 
 // Apply standard rate limiting to all API routes
 Route::middleware('throttle:standard')->group(function () {
@@ -86,6 +86,8 @@ Route::middleware('throttle:standard')->group(function () {
             Route::get('/clients-cases', [LawyerController::class, 'getClientsCases']);
             Route::get('/cases', [LawyerController::class, 'getCases']);
             Route::put('/update-profile', [LawyerController::class, 'updateOwnProfile']);
+            // Get the attachment(s) of a case by its ID only
+            Route::get('/cases/{caseId}/attachment', [LegalCaseController::class, 'getCaseAttachment']);
         });
         
         // Judge routes
@@ -114,9 +116,7 @@ Route::middleware('throttle:standard')->group(function () {
         Route::get('/lawyers', [LawyerController::class, 'getAllLawyers']);
         
         // Case Attachments routes
-        Route::post('/cases/{case_id}/attachments', [CaseAttachmentController::class, 'store']);
-        Route::get('/cases/{case_id}/attachments', [CaseAttachmentController::class, 'index']);
-        
+        Route::get('/cases/{id}/attachments', [LegalCaseController::class, 'getCaseAttachments']);
         // Consultation Request routes with stricter rate limiting
         Route::middleware('throttle:sensitive')->group(function () {
             Route::post('/consultations/request', [ConsultationController::class, 'requestConsultation']);

@@ -101,25 +101,11 @@ return new class extends Migration
             $table->foreignId('case_id')->constrained('cases', 'case_id')->onDelete('cascade');
             $table->foreignId('client_id')->constrained('clients', 'client_id')->onDelete('cascade');
             $table->foreignId('lawyer_id')->constrained('lawyers', 'lawyer_id')->onDelete('cascade');
-            $table->json('attachments')->nullable();
             $table->enum('status', ['Pending', 'Accepted', 'Rejected'])->default('Pending');
             $table->timestamps();
         });
 
         // 9. Create court_sessions table
-        Schema::create('court_sessions', function (Blueprint $table) {
-            $table->id('session_id');
-            $table->foreignId('legal_case_id')->constrained('cases', 'case_id')->onDelete('cascade');
-            $table->date('session_date');
-            $table->time('session_time');
-            $table->string('court_name');
-            $table->string('judge_name')->nullable();
-            $table->text('session_notes')->nullable();
-            $table->json('attachments')->nullable();
-            $table->enum('session_status', ['Scheduled', 'Completed', 'Postponed', 'Cancelled'])->default('Scheduled');
-            $table->foreignId('added_by_id')->constrained('users')->onDelete('cascade');
-            $table->timestamps();
-        });
 
         // 10. Create legal_books table
         Schema::create('legal_books', function (Blueprint $table) {

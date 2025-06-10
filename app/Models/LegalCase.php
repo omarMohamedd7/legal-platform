@@ -58,9 +58,5 @@ class LegalCase extends Model
         return $this->hasOne(PublishedCase::class, 'case_id', 'case_id');
     }
     
-    // علاقة مع جلسات المحكمة
-    public function courtSessions()
-    {
-        return $this->hasMany(CourtSession::class, 'legal_case_id', 'case_id');
-    }
+   
 }

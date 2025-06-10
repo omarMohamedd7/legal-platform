@@ -14,18 +14,14 @@ class CaseRequest extends Model
         'client_id',
         'lawyer_id',
         'case_id',
-        'attachments',
         'status',
     ];
 
     /**
      * The attributes that should be cast.
      *
-     * @var array
      */
-    protected $casts = [
-        'attachments' => 'array',
-    ];
+   
 
     public function client()
     {
