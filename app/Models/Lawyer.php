@@ -41,9 +41,6 @@ class Lawyer extends Model
     }
     
     // علاقة مع جلسات المحكمة
-    public function courtSessions()
-    {
-        return $this->hasMany(CourtSession::class, 'lawyer_id');
-    }
+   
 }
 
