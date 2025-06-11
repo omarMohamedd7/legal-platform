@@ -120,9 +120,11 @@ class PublishedCaseController extends Controller
                 ->paginate(15);
             
             // Format the response
-            $formattedCases = $publishedCases->map(function($publishedCase) {
+            $formattedCases = $publishedCases->map(function($publishedCase) use ($lawyer) {
+                $hasOffered = $publishedCase->offers()->where('lawyer_id', $lawyer->lawyer_id)->exists() ? 1 : 0;
                 return [
                     'published_case_id' => $publishedCase->published_case_id,
+                    'has_offered' => $hasOffered,
                     'status' => $publishedCase->status,
                     'target_city' => $publishedCase->target_city,
                     'target_specialization' => $publishedCase->target_specialization,
