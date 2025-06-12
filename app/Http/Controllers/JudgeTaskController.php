@@ -70,10 +70,8 @@ class JudgeTaskController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'execution_date' => 'required|date|date_format:Y-m-d',
-            'start_time' => 'required|date_format:H:i',
-            'task_type' => 'required|string|max:50',
-            'reminder_enabled' => 'boolean',
+            'date' => 'required|date|date_format:Y-m-d',
+            'time' => 'required|date_format:H:i',
         ]);
 
         // Create the task for the authenticated judge
@@ -81,10 +79,8 @@ class JudgeTaskController extends Controller
             'judge_id' => $judge->judge_id,
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
-            'date' => $validated['execution_date'],
-            'time' => $validated['start_time'],
-            'task_type' => $validated['task_type'],
-            'reminder_enabled' => $validated['reminder_enabled'] ?? false,
+            'date' => $validated['date'],
+            'time' => $validated['time'],
             'status' => 'pending',
         ]);
 

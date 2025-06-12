@@ -150,7 +150,7 @@ class LegalBookController extends Controller
      * @param  string  $category
      * @return \Illuminate\Http\Response
      */
-    public function byCategory($category)
+    public function getBooksByCategory($category)
     {
         try {
             $books = LegalBook::where('category', $category)

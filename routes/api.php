@@ -15,6 +15,7 @@ use App\Http\Controllers\ProfilePictureController;
 use App\Http\Controllers\LegalCaseController;
 use App\Http\Controllers\JudgeTaskController;
 use App\Http\Controllers\VideoAnalysisController;
+use App\Http\Controllers\LegalBookController;
 
 Route::middleware('throttle:standard')->group(function () {
     // Auth
@@ -80,6 +81,11 @@ Route::middleware('throttle:standard')->group(function () {
         Route::post('/video-analyses', [VideoAnalysisController::class, 'store']);
         Route::get('/video-analyses', [VideoAnalysisController::class, 'index']);
         Route::get('/video-analyses/{id}', [VideoAnalysisController::class, 'show']);
+        Route::get('/legal-books', [LegalBookController::class, 'index']);
+        Route::get('/legal-books/categories', [LegalBookController::class, 'getBooksByCategory']);
+        Route::get('/legal-books/category/{category}', [LegalBookController::class, 'getBooksByCategory']);
+        Route::get('/legal-books/{id}', [LegalBookController::class, 'show']);
+        Route::get('/legal-books/{id}/download', [LegalBookController::class, 'download']);
     });
 });
 

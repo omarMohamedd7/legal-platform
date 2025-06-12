@@ -79,6 +79,19 @@ class LegalBookSeeder extends Seeder
             ],
         ];
 
+        // Example: Add a new book to the library
+        // 1. Place your PDF/DOCX file in storage/app/public/books/
+        // 2. Place your cover image in storage/app/public/books/covers/
+        // 3. Add a new entry here:
+        $books[] = [
+            'title' => 'Example Law Book',
+            'author' => 'Jane Doe',
+            'category' => 'Example Law',
+            'description' => 'This is an example legal book for demonstration.',
+            'file_path' => 'books/example_law_book.pdf',
+            'image_path' => 'books/covers/example_law_book.jpg'
+        ];
+
         // Insert books into database
         foreach ($books as $book) {
             // Create sample placeholder files if they don't exist (for development)

@@ -22,8 +22,7 @@ class JudgeTask extends Model
         'date',
         'time',
         'status',
-        'task_type',
-        'reminder_enabled',
+        
     ];
 
     /**
@@ -34,7 +33,6 @@ class JudgeTask extends Model
     protected $casts = [
         'date' => 'date',
         'time' => 'datetime:H:i',
-        'reminder_enabled' => 'boolean',
     ];
 
     /**

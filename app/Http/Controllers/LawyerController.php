@@ -379,12 +379,15 @@ class LawyerController extends Controller
             if (isset($validated['status'])) {
                 // Map 'active' and 'closed' to the actual statuses in the database
                 $statusMap = [
-                    'active' => ['Active', 'Pending', 'In Progress'],
+                    'active' => ['Active'],
                     'closed' => ['Closed', 'Completed', 'Cancelled', 'Rejected']
                 ];
                 
                 $statuses = $statusMap[$validated['status']];
                 $query->whereIn('status', $statuses);
+            } else {
+                // Default: only show 'Active' cases
+                $query->where('status', 'Active');
             }
             
             // Get paginated results
