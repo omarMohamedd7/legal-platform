@@ -19,9 +19,24 @@ class VideoAnalysis extends Model
     protected $fillable = [
         'judge_id',
         'file_path',
-        'status',
-        'result',
+        'video_name',
+        'duration',
+        'analysis_date',
+        'prediction',
+        'confidence',
+        'summary',
         'notes',
+    ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'analysis_date' => 'datetime',
+        'confidence' => 'float',
+        'duration' => 'integer',
     ];
 
     /**
@@ -43,9 +58,26 @@ class VideoAnalysis extends Model
     }
 
     /**
+     * Format the duration as human-readable.
+     *
+     * @return string
+     */
+    public function getFormattedDurationAttribute()
+    {
+        if (!$this->duration) {
+            return null;
+        }
+        
+        $minutes = floor($this->duration / 60);
+        $seconds = $this->duration % 60;
+        
+        return sprintf('%02d:%02d', $minutes, $seconds);
+    }
+
+    /**
      * The accessors to append to the model's array form.
      *
      * @var array
      */
-    protected $appends = ['video_url'];
+    protected $appends = ['video_url', 'formatted_duration'];
 } 

@@ -66,7 +66,8 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->enum('status', ['Pending', 'Active', 'Closed'])->default('Pending');
             $table->json('attachments')->nullable();
-            $table->foreignId('created_by_id')->nullable()->constrained('clients')->nullOnDelete();
+            $table->unsignedBigInteger('created_by_id')->nullable();
+            $table->foreign('created_by_id')->references('client_id')->on('clients')->onDelete('set null');
             $table->foreignId('assigned_lawyer_id')->nullable()->constrained('lawyers', 'lawyer_id')->nullOnDelete();
             $table->timestamps();
         });
@@ -122,9 +123,14 @@ return new class extends Migration
             $table->id();
             $table->foreignId('judge_id')->constrained('judges', 'judge_id')->onDelete('cascade');
             $table->string('file_path');
-            $table->enum('status', ['Pending', 'Processing', 'Completed'])->default('Pending');
-            $table->string('result')->nullable();
+            $table->string('video_name');
+            $table->integer('duration')->nullable();
+            $table->datetime('analysis_date')->nullable();
+            $table->string('prediction')->nullable();
+            $table->float('confidence')->nullable();
+            $table->text('summary')->nullable();
             $table->text('notes')->nullable();
+            $table->enum('status', ['Pending', 'Processing', 'Completed'])->default('Pending');
             $table->timestamps();
         });
 

@@ -16,6 +16,8 @@ use App\Http\Controllers\LegalCaseController;
 use App\Http\Controllers\JudgeTaskController;
 use App\Http\Controllers\VideoAnalysisController;
 use App\Http\Controllers\LegalBookController;
+use App\Http\Controllers\ConsultationController;
+use App\Http\Controllers\PaymentController;
 
 Route::middleware('throttle:standard')->group(function () {
     // Auth
@@ -87,6 +89,21 @@ Route::middleware('throttle:standard')->group(function () {
         Route::get('/legal-books/category/{category}', [LegalBookController::class, 'getBooksByCategory']);
         Route::get('/legal-books/{id}', [LegalBookController::class, 'show']);
         Route::get('/legal-books/{id}/download', [LegalBookController::class, 'download']);
+
+        // Video Analysis endpoints
+Route::post('/video-analyses', [VideoAnalysisController::class, 'store']);
+Route::get('/video-analyses', [VideoAnalysisController::class, 'index']);
+Route::get('/video-analyses/{id}', [VideoAnalysisController::class, 'show']);
+Route::get('/video-analyses/judge/{judgeId}', [VideoAnalysisController::class, 'getJudgeResults']);
+
+        // Consultation routes
+        Route::post('/consultations/request', [ConsultationController::class, 'requestConsultation'])
+            ->middleware('rate_limit:consultation_request');
+        
+        // Payment endpoint
+        Route::post('/payments', [PaymentController::class, 'processPayment'])
+            ->middleware('rate_limit:payment_process');
+        Route::get('/payments/{id}', [PaymentController::class, 'getPayment']);
 
     });
 });
