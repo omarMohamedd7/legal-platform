@@ -31,6 +31,7 @@ class AuthController extends Controller
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
             'password' => 'required',
+            'fcm_token' => 'nullable|string',
         ]);
     
         if ($validator->fails()) {
@@ -73,6 +74,11 @@ class AuthController extends Controller
         // البريد موثّق، تسجيل الدخول
         $token = $user->createToken('auth_token')->plainTextToken;
     
+        // Update FCM token if provided
+        if ($request->has('fcm_token')) {
+            $user->update(['fcm_token' => $request->fcm_token]);
+        }
+
         return (new UserResource($user))
             ->withMessage('Login successful')
             ->additional([
@@ -82,45 +88,51 @@ class AuthController extends Controller
     
     // تسجيل الدخول - Step 2: Verify OTP and complete login
     public function verifyLoginOtp(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'email' => 'required|email|exists:users,email',
-        'otp' => 'required|string|size:6',
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Validation failed',
-            'errors' => $validator->errors()
-        ], 422);
-    }
-
-    $user = User::where('email', $request->email)->firstOrFail();
-
-    if (!$this->otpService->verifyOtp($user, $request->otp)) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Invalid or expired OTP'
-        ], 401);
-    }
-
-    // تحديث email_verified_at إن لم يكن موثّقًا
-    if (!$user->email_verified_at) {
-        $user->update([
-            'email_verified_at' => Carbon::now(),
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email|exists:users,email',
+            'otp' => 'required|string|size:6',
+            'fcm_token' => 'nullable|string',
         ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user = User::where('email', $request->email)->firstOrFail();
+
+        if (!$this->otpService->verifyOtp($user, $request->otp)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid or expired OTP'
+            ], 401);
+        }
+
+        // تحديث email_verified_at إن لم يكن موثّقًا
+        if (!$user->email_verified_at) {
+            $user->update([
+                'email_verified_at' => Carbon::now(),
+            ]);
+        }
+
+        // OTP verified, create token and complete login
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        // Update FCM token if provided
+        if ($request->has('fcm_token')) {
+            $user->update(['fcm_token' => $request->fcm_token]);
+        }
+
+        return (new UserResource($user))
+            ->withMessage('Login successful')
+            ->additional([
+                'token' => $token
+            ]);
     }
-
-    // OTP verified, create token and complete login
-    $token = $user->createToken('auth_token')->plainTextToken;
-
-    return (new UserResource($user))
-        ->withMessage('Login successful')
-        ->additional([
-            'token' => $token
-        ]);
-}
     
     // Resend OTP if expired
     public function resendOtp(Request $request)

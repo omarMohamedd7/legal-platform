@@ -5,12 +5,27 @@ namespace App\Http\Controllers;
 use App\Models\CaseOffer;
 use App\Models\PublishedCase;
 use App\Models\LegalCase;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use App\Services\NotificationService;
 
 class CaseOfferController extends Controller
 {
+    protected $notificationService;
+    
+    /**
+     * Create a new controller instance.
+     *
+     * @param NotificationService $notificationService
+     * @return void
+     */
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+    
     /**
      * تقديم عرض على قضية منشورة
      * Submit an offer for a published case
@@ -87,6 +102,22 @@ class CaseOfferController extends Controller
             'status' => 'Pending',
         ]);
         
+        // Send notification to the client
+        $publishedCase = PublishedCase::with('client.user', 'legalCase')->find($publishedCaseId);
+        $client = $publishedCase->client->user;
+        if ($client && $client->fcm_token) {
+            $this->notificationService->sendToUser(
+                $client,
+                'New Case Offer',
+                "A lawyer has submitted an offer for your case: {$publishedCase->legalCase->case_number}",
+                [
+                    'published_case_id' => $publishedCaseId,
+                    'offer_id' => $offer->offer_id,
+                    'type' => 'new_case_offer'
+                ]
+            );
+        }
+        
         return response()->json([
             'success' => true,
             'message' => 'تم تقديم العرض بنجاح.',
@@ -157,6 +188,21 @@ class CaseOfferController extends Controller
                 ->where('offer_id', '!=', $offerId)
                 ->update(['status' => 'Rejected']);
             
+            // Send notification to the lawyer
+            $lawyer = User::find($offer->lawyer->user_id);
+            if ($lawyer && $lawyer->fcm_token) {
+                $this->notificationService->sendToUser(
+                    $lawyer,
+                    'Offer Accepted',
+                    "Your offer for case {$legalCase->case_number} has been accepted.",
+                    [
+                        'offer_id' => $offer->offer_id,
+                        'case_id' => $legalCase->case_id,
+                        'type' => 'offer_accepted'
+                    ]
+                );
+            }
+            
             DB::commit();
             
             return response()->json([
@@ -181,26 +227,36 @@ class CaseOfferController extends Controller
         $user = Auth::user();
         
         if (!$user || $user->role !== 'client') {
-            return response()->json(['message' => 'غير مصرح. يمكن للعملاء فقط رفض العروض.'], 403);
+            return response()->json([
+                'success' => false,
+                'message' => 'غير مصرح. يمكن للعملاء فقط رفض العروض.'
+            ], 403);
         }
         
         $client = $user->client;
         
         if (!$client) {
-            return response()->json(['message' => 'لم يتم العثور على ملف العميل.'], 404);
+            return response()->json([
+                'success' => false,
+                'message' => 'لم يتم العثور على ملف العميل.'
+            ], 404);
         }
         
-        $offer = CaseOffer::with('publishedCase')->findOrFail($offerId);
+        $offer = CaseOffer::with(['publishedCase', 'lawyer.user'])->findOrFail($offerId);
         
-        // التأكد من أن العميل هو صاحب القضية
-        if ($client->client_id !== $offer->publishedCase->client_id) {
-            return response()->json(['message' => 'غير مصرح. هذا العرض ليس لقضيتك.'], 403);
+        // التحقق مما إذا كان العرض ينتمي إلى قضية العميل
+        if ($offer->publishedCase->client_id !== $client->client_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'غير مصرح. يمكنك فقط رفض العروض المقدمة على قضاياك.'
+            ], 403);
         }
         
-        // التحقق مما إذا كان العرض في حالة انتظار
+        // التحقق مما إذا كان العرض معلقاً
         if ($offer->status !== 'Pending') {
             return response()->json([
-                'message' => 'لا يمكن رفض هذا العرض. فقط العروض في حالة الانتظار يمكن رفضها.',
+                'success' => false,
+                'message' => 'لا يمكن رفض هذا العرض. العرض ليس في حالة معلقة.',
                 'current_status' => $offer->status
             ], 400);
         }
@@ -209,7 +265,26 @@ class CaseOfferController extends Controller
         $offer->status = 'Rejected';
         $offer->save();
         
-        return response()->json(['message' => 'تم رفض العرض بنجاح.']);
+        // Send notification to the lawyer
+        $lawyer = $offer->lawyer->user;
+        if ($lawyer && $lawyer->fcm_token) {
+            $this->notificationService->sendToUser(
+                $lawyer,
+                'Offer Rejected',
+                "Your offer has been rejected by the client.",
+                [
+                    'offer_id' => $offer->offer_id,
+                    'published_case_id' => $offer->published_case_id,
+                    'type' => 'offer_rejected'
+                ]
+            );
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'تم رفض العرض بنجاح.',
+            'offer' => $offer
+        ]);
     }
     
     /**
@@ -400,7 +475,7 @@ class CaseOfferController extends Controller
             ], 404);
         }
         
-        $offer = CaseOffer::with('publishedCase')->findOrFail($offerId);
+        $offer = CaseOffer::with(['publishedCase.legalCase', 'lawyer.user'])->findOrFail($offerId);
         
         // التأكد من أن العميل هو صاحب القضية
         if ($client->client_id !== $offer->publishedCase->client_id) {
@@ -453,6 +528,21 @@ class CaseOfferController extends Controller
                     ->where('offer_id', '!=', $offerId)
                     ->update(['status' => 'Rejected']);
                 
+                // Send notification to the lawyer
+                $lawyer = $offer->lawyer->user;
+                if ($lawyer && $lawyer->fcm_token) {
+                    $this->notificationService->sendToUser(
+                        $lawyer,
+                        'Offer Accepted',
+                        "Your offer for case {$legalCase->case_number} has been accepted.",
+                        [
+                            'offer_id' => $offer->offer_id,
+                            'case_id' => $legalCase->case_id,
+                            'type' => 'offer_accepted'
+                        ]
+                    );
+                }
+                
                 DB::commit();
                 
                 return response()->json([
@@ -473,6 +563,21 @@ class CaseOfferController extends Controller
             // تحديث حالة العرض
             $offer->status = 'Rejected';
             $offer->save();
+            
+            // Send notification to the lawyer
+            $lawyer = $offer->lawyer->user;
+            if ($lawyer && $lawyer->fcm_token) {
+                $this->notificationService->sendToUser(
+                    $lawyer,
+                    'Offer Rejected',
+                    "Your offer for case {$offer->publishedCase->legalCase->case_number} has been rejected.",
+                    [
+                        'offer_id' => $offer->offer_id,
+                        'published_case_id' => $offer->published_case_id,
+                        'type' => 'offer_rejected'
+                    ]
+                );
+            }
             
             return response()->json([
                 'success' => true,

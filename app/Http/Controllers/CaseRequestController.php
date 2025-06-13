@@ -7,14 +7,29 @@ use App\Models\LegalCase;
 use App\Models\CaseAttachment;
 use App\Models\Lawyer;
 use App\Models\Client;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use App\Services\NotificationService;
 
 class CaseRequestController extends Controller
 {
+    protected $notificationService;
+    
+    /**
+     * Create a new controller instance.
+     *
+     * @param NotificationService $notificationService
+     * @return void
+     */
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+    
     /**
      * Create a direct case request from a client to a specific lawyer
      * 
@@ -97,6 +112,22 @@ class CaseRequestController extends Controller
                 'case_id' => $legalCase->case_id,
                 'status' => 'Pending',
             ]);
+            
+            // Send notification to the lawyer
+            $lawyerUser = $lawyer->user;
+            if ($lawyerUser && $lawyerUser->fcm_token) {
+                $this->notificationService->sendToUser(
+                    $lawyerUser,
+                    'New Case Request',
+                    "You have received a new case request from {$user->name}",
+                    [
+                        'request_id' => $caseRequest->request_id,
+                        'case_id' => $legalCase->case_id,
+                        'case_number' => $legalCase->case_number,
+                        'type' => 'new_case_request'
+                    ]
+                );
+            }
 
             return response()->json([
                 'success' => true,
@@ -169,7 +200,7 @@ class CaseRequestController extends Controller
                 return response()->json(['message' => 'لم يتم العثور على ملف المحامي.'], 404);
             }
             
-            $caseRequest = CaseRequest::with('case')->findOrFail($id);
+            $caseRequest = CaseRequest::with(['case', 'client.user'])->findOrFail($id);
             
             // Verify that this request belongs to the authenticated lawyer
             if ($caseRequest->lawyer_id !== $lawyer->lawyer_id) {
@@ -185,43 +216,71 @@ class CaseRequestController extends Controller
             }
             
             $action = $request->input('action');
+            $clientUser = $caseRequest->client->user;
 
             // Update the request status based on action
             if ($action === 'accept') {
-            $caseRequest->status = 'Accepted';
-            $caseRequest->save();
-            
-            // Update the associated case status
-            if ($caseRequest->case) {
-                $caseRequest->case->status = 'Active';
-                $caseRequest->case->save();
-            }
-            
-            return response()->json([
-                'message' => 'تم قبول طلب القضية وتنشيط القضية.',
-                'request' => [
-                    'request_id' => $caseRequest->request_id,
-                    'status' => $caseRequest->status,
-                    'updated_at' => $caseRequest->updated_at,
-                ],
+                $caseRequest->status = 'Accepted';
+                $caseRequest->save();
+                
+                // Update the associated case status
+                if ($caseRequest->case) {
+                    $caseRequest->case->status = 'Active';
+                    $caseRequest->case->save();
+                }
+                
+                // Send notification to client
+                if ($clientUser && $clientUser->fcm_token) {
+                    $this->notificationService->sendToUser(
+                        $clientUser,
+                        'Case Request Accepted',
+                        "Your case request has been accepted by the lawyer.",
+                        [
+                            'request_id' => $caseRequest->request_id,
+                            'case_id' => $caseRequest->case->case_id,
+                            'type' => 'case_request_accepted'
+                        ]
+                    );
+                }
+                
+                return response()->json([
+                    'message' => 'تم قبول طلب القضية وتنشيط القضية.',
+                    'request' => [
+                        'request_id' => $caseRequest->request_id,
+                        'status' => $caseRequest->status,
+                        'updated_at' => $caseRequest->updated_at,
+                    ],
                     'case' => $caseRequest->case ? [
-                    'case_id' => $caseRequest->case->case_id,
-                    'status' => $caseRequest->case->status,
-                    'updated_at' => $caseRequest->case->updated_at,
+                        'case_id' => $caseRequest->case->case_id,
+                        'status' => $caseRequest->case->status,
+                        'updated_at' => $caseRequest->case->updated_at,
                     ] : null,
                 ]);
             } else { // action === 'reject'
-            $caseRequest->status = 'Rejected';
-            $caseRequest->save();
-            
-            return response()->json([
-                'message' => 'تم رفض طلب القضية.',
-                'request' => [
-                    'request_id' => $caseRequest->request_id,
-                    'status' => $caseRequest->status,
-                    'updated_at' => $caseRequest->updated_at,
-                ],
-            ]);
+                $caseRequest->status = 'Rejected';
+                $caseRequest->save();
+                
+                // Send notification to client
+                if ($clientUser && $clientUser->fcm_token) {
+                    $this->notificationService->sendToUser(
+                        $clientUser,
+                        'Case Request Rejected',
+                        "Your case request has been rejected by the lawyer.",
+                        [
+                            'request_id' => $caseRequest->request_id,
+                            'type' => 'case_request_rejected'
+                        ]
+                    );
+                }
+                
+                return response()->json([
+                    'message' => 'تم رفض طلب القضية.',
+                    'request' => [
+                        'request_id' => $caseRequest->request_id,
+                        'status' => $caseRequest->status,
+                        'updated_at' => $caseRequest->updated_at,
+                    ],
+                ]);
             }
         } catch (\Exception $e) {
             Log::error('Error processing case request: ' . $e->getMessage());

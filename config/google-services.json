@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "450522985564",
+    "project_id": "nuhkm1",
+    "storage_bucket": "nuhkm1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:450522985564:android:dfe29e5807daee61f1e299",
+        "android_client_info": {
+          "package_name": "com.legal.nahkum"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "450522985564-vr2rn7i5mur3utatjeuvgjfcj87rcblu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB3b-FATdFc_m1tgy7XkBIsW4Gg93aKOVk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "450522985564-vr2rn7i5mur3utatjeuvgjfcj87rcblu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

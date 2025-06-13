@@ -33,7 +33,7 @@ class LegalCase extends Model
 
     public function createdBy()
     {
-        return $this->belongsTo(User::class, 'created_by_id');
+        return $this->belongsTo(Client::class, 'created_by_id');
     }
 
     public function assignedLawyer()
@@ -41,10 +41,7 @@ class LegalCase extends Model
         return $this->belongsTo(Lawyer::class, 'assigned_lawyer_id');
     }
 
-    public function casePublish()
-    {
-        return $this->belongsTo(Judge::class, 'case_publish_id');
-    }
+    
     
     // علاقة مع طلب التوكيل المباشر
     public function caseRequest()

@@ -33,7 +33,6 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
             $table->string('city')->nullable();
             $table->string('phone_number')->nullable();
-            $table->string('fcm_token')->nullable();
             $table->timestamps();
         });
 
@@ -44,7 +43,6 @@ return new class extends Migration
             $table->enum('specialization', ['Family Law', 'Civil Law', 'Criminal Law', 'Commercial Law', 'International Law']);
             $table->string('city');
             $table->string('phone_number')->nullable();
-            $table->string('bio')->nullable();
             $table->decimal('consult_fee', 10, 2)->default(0);
             $table->timestamps();
         });
@@ -68,7 +66,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->enum('status', ['Pending', 'Active', 'Closed'])->default('Pending');
             $table->json('attachments')->nullable();
-            $table->foreignId('created_by_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('created_by_id')->nullable()->constrained('clients')->nullOnDelete();
             $table->foreignId('assigned_lawyer_id')->nullable()->constrained('lawyers', 'lawyer_id')->nullOnDelete();
             $table->timestamps();
         });
@@ -145,9 +143,8 @@ return new class extends Migration
             $table->id('payment_id');
             $table->foreignId('consultation_request_id')->unique()->constrained('consultation_requests')->onDelete('cascade');
             $table->decimal('amount', 10, 2);
-            $table->enum('payment_method', ['credit_card', 'paypal', 'visa', 'mastercard', 'bank_transfer']);
+            $table->enum('payment_method', ['credit_card', 'paypal', 'visa', ]);
             $table->enum('status', ['pending', 'successful', 'failed'])->default('pending');
-            $table->string('transaction_id')->nullable();
             $table->timestamps();
         });
 

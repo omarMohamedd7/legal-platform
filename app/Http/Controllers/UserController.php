@@ -13,7 +13,6 @@ use App\Models\Judge;
 use App\Http\Resources\UserResource;
 use App\Http\Resources\UserCollection;
 use Illuminate\Support\Facades\DB;
-
 class UserController extends Controller
 {
     // عرض كل المستخدمين (اختياري)
@@ -21,7 +20,33 @@ class UserController extends Controller
     {
         return new UserCollection(User::paginate(10));
     }
-
+    public function saveFcmToken(Request $request)
+    {
+        $request->validate([
+            'fcm_token' => 'required|string',
+        ]);
+    
+        $user = auth('sanctum')->user();
+        
+        // Add validation to ensure we have an authenticated user
+        if (!$user) {
+            return response()->json([
+                'message' => 'Unauthenticated'
+            ], 401);
+        }
+    
+        // Ensure $user is actually a User model instance
+        if (!$user instanceof \App\Models\User) {
+            return response()->json([
+                'message' => 'Invalid user object'
+            ], 500);
+        }
+    
+        $user->fcm_token = $request->fcm_token;
+        $user->save();
+    
+        return response()->json(['message' => 'Token saved']);
+    }
     public function store(Request $request)
     {
         try {
@@ -53,6 +78,7 @@ class UserController extends Controller
                 ],
                 'court_name' => 'nullable|string|max:255',
                 'consult_fee' => 'nullable|numeric|min:0',
+                'fcm_token' => 'nullable|string',
             ]);
             
             // Handle profile image upload if provided
@@ -102,6 +128,7 @@ class UserController extends Controller
                     'password' => Hash::make($validated['password']),
                     'role' => $validated['role'],
                     'profile_image_url' => $profileImageUrl,
+                    'fcm_token' => $validated['fcm_token'] ?? null,
                 ]);
                 
                 \Illuminate\Support\Facades\Log::info('User created', [

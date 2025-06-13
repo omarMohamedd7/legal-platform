@@ -29,13 +29,14 @@ Route::middleware('throttle:standard')->group(function () {
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('/reset-password/verify-otp', [AuthController::class, 'verifyResetOtp']);
     Route::post('/reset-password', [AuthController::class, 'resetPassword']);
-
+    Route::middleware('auth:sanctum')->post('save-fcm-token', [UserController::class, 'saveFcmToken']);
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
         Route::get('/user', function (Request $request) {
             return $request->user()->load('client', 'lawyer', 'judge');
         });
+        
 
         // Profile
         Route::middleware('auth:sanctum')->put('/profilee', [ProfileController::class, 'updateProfile']);
@@ -86,6 +87,7 @@ Route::middleware('throttle:standard')->group(function () {
         Route::get('/legal-books/category/{category}', [LegalBookController::class, 'getBooksByCategory']);
         Route::get('/legal-books/{id}', [LegalBookController::class, 'show']);
         Route::get('/legal-books/{id}/download', [LegalBookController::class, 'download']);
+
     });
 });
 

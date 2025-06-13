@@ -5,12 +5,27 @@ namespace App\Http\Controllers;
 use App\Models\PublishedCase;
 use App\Models\LegalCase;
 use App\Models\Lawyer;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use App\Services\NotificationService;
 
 class PublishedCaseController extends Controller
 {
+    protected $notificationService;
+    
+    /**
+     * Create a new controller instance.
+     *
+     * @param NotificationService $notificationService
+     * @return void
+     */
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     /**
      * نشر قضية للعامة للمحامين
      * Publish a case for lawyers to view and make offers
@@ -57,6 +72,27 @@ class PublishedCaseController extends Controller
                 'target_city' => $validated['target_city'],
                 'target_specialization' => $validated['case_type'], // Set target_specialization to match case_type
             ]);
+            
+            // Send notifications to lawyers in the target city with matching specialization
+            $targetLawyers = Lawyer::where('city', $validated['target_city'])
+                ->where('specialization', $validated['case_type'])
+                ->with('user')
+                ->get();
+                
+            foreach ($targetLawyers as $lawyer) {
+                if ($lawyer->user && $lawyer->user->fcm_token) {
+                    $this->notificationService->sendToUser(
+                        $lawyer->user,
+                        'New Case Available',
+                        "A new case matching your specialization is available in your city.",
+                        [
+                            'published_case_id' => $publishedCase->published_case_id,
+                            'case_type' => $validated['case_type'],
+                            'type' => 'new_published_case'
+                        ]
+                    );
+                }
+            }
             
             // Load the legal case relationship for the response
             $publishedCase->load('legalCase');

@@ -8,7 +8,7 @@
     "require": {
         "php": "^8.2",
         "guzzlehttp/guzzle": "^7.9",
-        "kreait/firebase-php": "7.18",
+        "kreait/firebase-php": "^7.18",
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.1",
         "laravel/tinker": "^2.10.1"
@@ -71,7 +71,8 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true,
             "php-http/discovery": true
-        }
+        },
+        "process-timeout": 1200
     },
     "minimum-stability": "stable",
     "prefer-stable": true
