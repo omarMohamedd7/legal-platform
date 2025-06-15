@@ -43,9 +43,12 @@ Route::middleware('throttle:standard')->group(function () {
         
 
         // Profile
-        Route::middleware('auth:sanctum')->put('/profilee', [ProfileController::class, 'updateProfile']);
+        Route::middleware('auth:sanctum')->match(['put', 'post'], '/update-profile', [ProfileController::class, 'updateProfile']);
+        Route::middleware('auth:sanctum')->put('/profile', [ProfileController::class, 'updateProfile']);
+        Route::middleware('auth:sanctum')->post('/profile', [ProfileController::class, 'updateProfile']);
         Route::middleware('auth:sanctum')->post('/profile/picture', [ProfilePictureController::class, 'upload']);
         Route::middleware('auth:sanctum')->delete('/profile/picture', [ProfilePictureController::class, 'delete']);
+        Route::middleware('auth:sanctum')->post('/profile/test', [ProfileController::class, 'testProfileUpdate']);
 
         
       

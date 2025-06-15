@@ -125,7 +125,7 @@ return new class extends Migration
             $table->foreignId('judge_id')->constrained('judges', 'judge_id')->onDelete('cascade');
             $table->string('file_path');
             $table->string('video_name');
-            $table->integer('duration')->nullable();
+            $table->string('duration')->nullable();
             $table->datetime('analysis_date')->nullable();
             $table->string('prediction')->nullable();
             $table->float('confidence')->nullable();
