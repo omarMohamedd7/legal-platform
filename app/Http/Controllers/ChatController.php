@@ -7,12 +7,25 @@ use App\Models\Message;
 use App\Models\User;
 use App\Models\Client;
 use App\Models\Lawyer;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 
 class ChatController extends Controller
 {
+    protected $notificationService;
+    
+    /**
+     * Constructor
+     * 
+     * @param NotificationService $notificationService
+     */
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+    
     /**
      * Get all contacts for the authenticated user
      *
@@ -23,8 +36,8 @@ class ChatController extends Controller
         $user = Auth::user();
         
         // Check if user is a client or lawyer
-        $isClient = $user->client()->exists();
-        $isLawyer = $user->lawyer()->exists();
+        $isClient = Client::where('user_id', $user->id)->exists();
+        $isLawyer = Lawyer::where('user_id', $user->id)->exists();
         
         if (!$isClient && !$isLawyer) {
             return response()->json([
@@ -65,8 +78,8 @@ class ChatController extends Controller
         $user = Auth::user();
         
         // Check if user is a client or lawyer
-        $isClient = $user->client()->exists();
-        $isLawyer = $user->lawyer()->exists();
+        $isClient = Client::where('user_id', $user->id)->exists();
+        $isLawyer = Lawyer::where('user_id', $user->id)->exists();
         
         if (!$isClient && !$isLawyer) {
             return response()->json([
@@ -139,8 +152,8 @@ class ChatController extends Controller
         $messageText = $request->message;
         
         // Check if user is a client or lawyer
-        $isClient = $user->client()->exists();
-        $isLawyer = $user->lawyer()->exists();
+        $isClient = Client::where('user_id', $user->id)->exists();
+        $isLawyer = Lawyer::where('user_id', $user->id)->exists();
         
         if (!$isClient && !$isLawyer) {
             return response()->json([
@@ -151,8 +164,8 @@ class ChatController extends Controller
         
         // Get receiver user
         $receiver = User::findOrFail($receiverId);
-        $isReceiverClient = $receiver->client()->exists();
-        $isReceiverLawyer = $receiver->lawyer()->exists();
+        $isReceiverClient = Client::where('user_id', $receiver->id)->exists();
+        $isReceiverLawyer = Lawyer::where('user_id', $receiver->id)->exists();
         
         // Check if the communication is between a client and a lawyer
         if (($isClient && !$isReceiverLawyer) || ($isLawyer && !$isReceiverClient)) {
@@ -193,6 +206,34 @@ class ChatController extends Controller
             'receiver_id' => $receiverId,
             'message' => $messageText
         ]);
+        
+        // Create notification data with sender_id and message
+        $notificationData = [
+            'sender_id' => $user->id,
+            'message' => $messageText
+        ];
+        
+        // Send push notification to the receiver
+        if ($receiver->fcm_token) {
+            $title = $user->name;
+            $body = $messageText;
+            
+            // Send push notification with the required data
+            $this->notificationService->sendToUser(
+                $receiver, 
+                $title, 
+                $body, 
+                $notificationData
+            );
+        }
+        
+        // Create in-app notification
+        $this->notificationService->sendNotification(
+            $receiverId,
+            'new_message',
+            "New message from {$user->name}",
+            $notificationData
+        );
         
         return response()->json([
             'status' => 'success',

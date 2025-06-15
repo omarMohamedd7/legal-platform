@@ -28,6 +28,12 @@
 									"value": "password",
 									"description": "Password for all test users",
 									"type": "text"
+								},
+								{
+									"key": "fcm_token",
+									"value": "test_fcm_token_for_client",
+									"description": "Optional FCM token for push notifications",
+									"type": "text"
 								}
 							]
 						},
@@ -62,6 +68,12 @@
 									"key": "password",
 									"value": "password",
 									"description": "Password for all test users",
+									"type": "text"
+								},
+								{
+									"key": "fcm_token",
+									"value": "test_fcm_token_for_lawyer",
+									"description": "Optional FCM token for push notifications",
 									"type": "text"
 								}
 							]
@@ -224,6 +236,94 @@
 				}
 			],
 			"description": "Chat API endpoints"
+		},
+		{
+			"name": "Notifications",
+			"item": [
+				{
+					"name": "Get Notifications",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/notifications",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"notifications"
+							]
+						},
+						"description": "Get all notifications for the authenticated user"
+					},
+					"response": []
+				},
+				{
+					"name": "Mark Notification as Read",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/notifications/:id/read",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"notifications",
+								":id",
+								"read"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "notification-id",
+									"description": "The ID of the notification to mark as read"
+								}
+							]
+						},
+						"description": "Mark a notification as read"
+					},
+					"response": []
+				},
+				{
+					"name": "Mark All Notifications as Read",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/notifications/read-all",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"notifications",
+								"read-all"
+							]
+						},
+						"description": "Mark all notifications as read"
+					},
+					"response": []
+				}
+			],
+			"description": "Notification endpoints"
 		}
 	],
 	"event": [
