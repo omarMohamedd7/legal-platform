@@ -17,13 +17,13 @@ class VideoAnalysisController extends Controller
      * AI endpoint URL
      */
     protected $aiEndpointUrl;
-    
+
     /**
      * Constructor to initialize properties from environment variables
      */
     public function __construct()
     {
-        $this->aiEndpointUrl = env('AI_VIDEO_ANALYSIS_ENDPOINT', 'http://192.168.0.24:8000') . '/analyze';
+        $this->aiEndpointUrl = env('AI_VIDEO_ANALYSIS_ENDPOINT') . '/predict';
     }
 
     /**
@@ -69,7 +69,7 @@ class VideoAnalysisController extends Controller
             // Store the video file
             $filename = time() . '_' . uniqid() . '.' . $videoFile->getClientOriginalExtension();
             $path = $videoFile->storeAs('ai_videos', $filename, 'public');
-            
+
             // Get the full path to the stored file
             $fullPath = Storage::disk('public')->path($path);
 
@@ -85,6 +85,7 @@ class VideoAnalysisController extends Controller
 
             if (!$aiResult['success']) {
                 return response()->json([
+                    'success' => $aiResult,
                     'error' => true,
                     'message' => 'AI processing failed: ' . $aiResult['message'],
                     'video_analysis_id' => $videoAnalysis->id
@@ -93,11 +94,11 @@ class VideoAnalysisController extends Controller
 
             // Update video analysis with AI results
             $videoAnalysis->update([
-                'duration' => $aiResult['data']['duration'],
-                'analysis_date' => Carbon::now(),
-                'prediction' => $aiResult['data']['prediction'],
-                'confidence' => $aiResult['data']['confidence'],
-                'summary' => $aiResult['data']['summary'] ?? null,
+                'prediction' => $aiResult['prediction'],
+                'confidence' => $aiResult['confidence'],
+                'analysis_date' => $aiResult['date'],
+                'duration' => $aiResult['duration'],
+                'video_name' => $aiResult['name'],
             ]);
 
             // Reload the model to get fresh data
@@ -106,7 +107,13 @@ class VideoAnalysisController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Video analysis completed successfully',
-                'data' => $videoAnalysis,
+                'data' => [
+                    'prediction' => $aiResult['prediction'],
+                    'confidence' => $aiResult['confidence'],
+                    'analysis_date' => $aiResult['date'],
+                    'duration' => $aiResult['duration'],
+                    'video_name' => $aiResult['name'],
+                ], 
             ], 201);
         } catch (\Exception $e) {
             Log::error('Video analysis error: ' . $e->getMessage());
@@ -130,64 +137,68 @@ class VideoAnalysisController extends Controller
         if (env('AI_VIDEO_ANALYSIS_MOCK', false)) {
             return $this->mockAIProcessing($videoPath);
         }
-        
-        try {
-            // Create a file resource to send to the AI API
-            $videoFile = fopen($videoPath, 'r');
 
-            // Send the video to the AI endpoint with a 50-second timeout
-            $response = Http::timeout(50)
-                ->attach('video', $videoFile)
-                ->post($this->aiEndpointUrl, [
-                    'video_analysis_id' => $videoAnalysisId
-                ]);
+        // try {
+        // Create a file resource to send to the AI API
+        $videoFile = fopen($videoPath, 'r');
 
-            // Close the file resource
-            fclose($videoFile);
+        // Send the video to the AI endpoint with a 50-second timeout
 
-            // Check if the request was successful
-            if ($response->successful()) {
-                $data = $response->json();
-                
-                // Validate required fields in the response
-                if (!isset($data['video_name']) || 
-                    !isset($data['duration']) || 
-                    !isset($data['prediction']) || 
-                    !isset($data['confidence'])) {
-                    
-                    Log::error('AI response missing required fields: ' . json_encode($data));
-                    return [
-                        'success' => false,
-                        'message' => 'AI response missing required fields'
-                    ];
-                }
-                
+        $response = Http::timeout(500000)
+            ->attach('file', $videoFile)
+            ->post($this->aiEndpointUrl, [
+                'video_analysis_id' => $videoAnalysisId
+            ]);
+
+        // Close the file resource
+        fclose($videoFile);
+
+        // Check if the request was successful
+        if ($response->successful()) {
+            $data = $response->json();
+
+            // Validate required fields in the response
+            if (
+                !isset($data['prediction']) ||
+                !isset($data['duration']) ||
+                !isset($data['name']) ||
+                !isset($data['confidence']) ||
+                !isset($data['date'])
+            ) {
+
+                Log::error('AI response missing required fields: ' . json_encode($data));
                 return [
-                    'success' => true,
-                    'data' => [
-                        'video_name' => $data['video_name'],
-                        'duration' => $data['duration'],
-                        'prediction' => $data['prediction'],
-                        'confidence' => $data['confidence'],
-                        'summary' => $data['summary'] ?? null
-                    ]
+                    'success' => false,
+                    'message' => 'AI response missing required fields'
                 ];
             }
-            
-            Log::error('AI endpoint error: ' . $response->body());
+
             return [
-                'success' => false,
-                'message' => 'AI endpoint returned error: ' . $response->status()
-            ];
-        } catch (\Exception $e) {
-            Log::error('AI processing error: ' . $e->getMessage());
-            return [
-                'success' => false,
-                'message' => 'AI processing error: ' . $e->getMessage()
+                'success' => true,
+                'name' => $data['name'],
+                'duration' => $data['duration'],
+                'prediction' => $data['prediction'],
+                'confidence' => $data['confidence'],
+                'date' => $data['date'],
+
+
             ];
         }
+
+        Log::error('AI endpoint error: ' . $response->body());
+        return [
+            'success' => false,
+            'message' => 'AI endpoint returned error: ' . $response->status()
+        ];
+        // } catch (\Exception $e) {
+        //     Log::error('AI processing error: ' . $e->getMessage());
+        //     return [
+        //         'success' => false,
+        //         'message' => 'AI processing error: ' . $e->getMessage()
+        //     ];
+        // }
     }
-    
+
     /**
      * Generate mock AI processing results for testing
      * 
@@ -198,11 +209,11 @@ class VideoAnalysisController extends Controller
     {
         // Simulate processing delay
         sleep(2);
-        
+
         // Extract filename from path for demo purposes
         $pathInfo = pathinfo($videoPath);
         $filename = $pathInfo['basename'];
-        
+
         // Generate mock AI analysis results
         $mockResults = [
             'video_name' => $filename,
@@ -211,15 +222,15 @@ class VideoAnalysisController extends Controller
             'confidence' => rand(65, 98) + (rand(0, 99) / 100), // Random confidence between 65-98%
             'summary' => $this->generateMockSummary()
         ];
-        
+
         Log::info('Mock AI processing completed', $mockResults);
-        
+
         return [
             'success' => true,
             'data' => $mockResults
         ];
     }
-    
+
     /**
      * Get a random prediction for mock results
      * 
@@ -230,7 +241,7 @@ class VideoAnalysisController extends Controller
         $predictions = ['Positive', 'Neutral', 'Negative', 'Attentive', 'Distracted'];
         return $predictions[array_rand($predictions)];
     }
-    
+
     /**
      * Generate a mock summary for testing
      * 
@@ -245,7 +256,7 @@ class VideoAnalysisController extends Controller
             'The judge showed excellent attentiveness to all parties and maintained a fair demeanor.',
             'The judge demonstrated appropriate courtroom management and clear communication.'
         ];
-        
+
         return $summaries[array_rand($summaries)];
     }
 
@@ -361,7 +372,7 @@ class VideoAnalysisController extends Controller
             // Calculate statistics
             $totalAnalyses = $videoAnalyses->count();
             $averageConfidence = $totalAnalyses > 0 ? $videoAnalyses->avg('confidence') : 0;
-            
+
             // Group by prediction
             $predictionCounts = $videoAnalyses->groupBy('prediction')
                 ->map(function ($group) {
@@ -389,4 +400,4 @@ class VideoAnalysisController extends Controller
             ], 500);
         }
     }
-} 
+}

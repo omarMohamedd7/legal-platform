@@ -29,6 +29,7 @@ Route::middleware('throttle:standard')->group(function () {
     });
     Route::post('/register', [UserController::class, 'store']);
     Route::post('/register/profile-picture', [ProfilePictureController::class, 'uploadForUser']);
+    Route::post('/verify-account', [UserController::class, 'verifyAccount']);
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('/reset-password/verify-otp', [AuthController::class, 'verifyResetOtp']);
     Route::post('/reset-password', [AuthController::class, 'resetPassword']);

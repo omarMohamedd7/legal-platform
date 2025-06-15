@@ -13,8 +13,17 @@ use App\Models\Judge;
 use App\Http\Resources\UserResource;
 use App\Http\Resources\UserCollection;
 use Illuminate\Support\Facades\DB;
+use App\Services\OtpService;
+
 class UserController extends Controller
 {
+    protected $otpService;
+    
+    public function __construct(OtpService $otpService)
+    {
+        $this->otpService = $otpService;
+    }
+
     // عرض كل المستخدمين (اختياري)
     public function index()
     {
@@ -121,7 +130,7 @@ class UserController extends Controller
             }
     
             // Use a database transaction to ensure atomicity
-            return DB::transaction(function () use ($validated, $profileImageUrl) {
+            return DB::transaction(function () use ($validated, $profileImageUrl, $request) {
                 $user = User::create([
                     'name' => $validated['name'],
                     'email' => $validated['email'],
@@ -129,6 +138,7 @@ class UserController extends Controller
                     'role' => $validated['role'],
                     'profile_image_url' => $profileImageUrl,
                     'fcm_token' => $validated['fcm_token'] ?? null,
+                    // Do not set email_verified_at - user needs to verify with OTP
                 ]);
                 
                 \Illuminate\Support\Facades\Log::info('User created', [
@@ -186,11 +196,22 @@ class UserController extends Controller
                     $user->load('judge');
                 }
                 
+                // Generate and send OTP for account verification
+                $otp = $this->otpService->generateOtp($user);
+                $this->otpService->sendOtpEmail($user, $otp, 'authentication');
+                
                 // Refresh user to get updated data
                 $user = $user->fresh();
         
-                return (new UserResource($user))
-                    ->withMessage('User registered successfully');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'User registered successfully. Please verify your account with the OTP sent to your email.',
+                    'data' => [
+                        'user' => new UserResource($user),
+                        'email' => $user->email,
+                        'requires_verification' => true
+                    ]
+                ], 201);
             });
                 
         } catch (\Exception $e) {
@@ -298,6 +319,87 @@ class UserController extends Controller
             'judge' => 'judge',
             default => '',
         };
+    }
+
+    /**
+     * Verify OTP and activate user account
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function verifyAccount(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email|exists:users,email',
+                'otp' => 'required|string|size:6',
+            ]);
+            
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+            
+            $user = User::where('email', $request->email)->firstOrFail();
+            
+            // Check if account is already verified
+            if ($user->email_verified_at) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Account is already verified',
+                    'data' => [
+                        'user' => new UserResource($user),
+                    ]
+                ]);
+            }
+            
+            if (!$this->otpService->verifyOtp($user, $request->otp)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or expired OTP'
+                ], 401);
+            }
+            
+            // Mark email as verified
+            $user->update([
+                'email_verified_at' => now(),
+            ]);
+            
+            // Load the appropriate relationship based on user role
+            if ($user->role === 'client') {
+                $user->load('client');
+            } elseif ($user->role === 'lawyer') {
+                $user->load('lawyer');
+            } elseif ($user->role === 'judge') {
+                $user->load('judge');
+            }
+            
+            // Generate token for automatic login after verification
+            $token = $user->createToken('auth_token')->plainTextToken;
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Account verified successfully',
+                'data' => [
+                    'user' => new UserResource($user),
+                    'token' => $token
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Account verification failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Account verification failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
 

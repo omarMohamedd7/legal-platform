@@ -67,11 +67,11 @@ class AuthController extends Controller
                 'success' => false,
                 'message' => 'Your account is not verified. OTP has been sent to your email.',
                 'email' => $user->email,
-                'requires_otp' => true
+                'requires_verification' => true
             ], 403);
         }
     
-        // البريد موثّق، تسجيل الدخول
+        // البريد موثّق، تسجيل الدخول مباشرة
         $token = $user->createToken('auth_token')->plainTextToken;
     
         // Update FCM token if provided
@@ -119,6 +119,15 @@ class AuthController extends Controller
             ]);
         }
 
+        // Load the appropriate relationship based on user role
+        if ($user->role === 'client') {
+            $user->load('client');
+        } elseif ($user->role === 'lawyer') {
+            $user->load('lawyer');
+        } elseif ($user->role === 'judge') {
+            $user->load('judge');
+        }
+
         // OTP verified, create token and complete login
         $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -127,11 +136,14 @@ class AuthController extends Controller
             $user->update(['fcm_token' => $request->fcm_token]);
         }
 
-        return (new UserResource($user))
-            ->withMessage('Login successful')
-            ->additional([
+        return response()->json([
+            'success' => true,
+            'message' => 'Login successful',
+            'data' => [
+                'user' => new UserResource($user),
                 'token' => $token
-            ]);
+            ]
+        ]);
     }
     
     // Resend OTP if expired

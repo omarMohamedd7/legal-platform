@@ -36,7 +36,7 @@ class VideoAnalysis extends Model
     protected $casts = [
         'analysis_date' => 'datetime',
         'confidence' => 'float',
-        'duration' => 'integer',
+        // 'duration' => 'integer',
     ];
 
     /**
@@ -57,27 +57,13 @@ class VideoAnalysis extends Model
         return URL::to(Storage::url($this->file_path));
     }
 
-    /**
-     * Format the duration as human-readable.
-     *
-     * @return string
-     */
-    public function getFormattedDurationAttribute()
-    {
-        if (!$this->duration) {
-            return null;
-        }
-        
-        $minutes = floor($this->duration / 60);
-        $seconds = $this->duration % 60;
-        
-        return sprintf('%02d:%02d', $minutes, $seconds);
-    }
+
+
 
     /**
      * The accessors to append to the model's array form.
      *
      * @var array
      */
-    protected $appends = ['video_url', 'formatted_duration'];
-} 
+    protected $appends = ['video_url'];
+}
