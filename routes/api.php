@@ -19,6 +19,7 @@ use App\Http\Controllers\LegalBookController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ChatController;
 
 Route::middleware('throttle:standard')->group(function () {
     // Auth
@@ -100,10 +101,10 @@ Route::middleware('throttle:standard')->group(function () {
         Route::get('/legal-books/{id}/download', [LegalBookController::class, 'download']);
 
         // Video Analysis endpoints
-Route::post('/video-analyses', [VideoAnalysisController::class, 'store']);
-Route::get('/video-analyses', [VideoAnalysisController::class, 'index']);
-Route::get('/video-analyses/{id}', [VideoAnalysisController::class, 'show']);
-Route::get('/video-analyses/judge/{judgeId}', [VideoAnalysisController::class, 'getJudgeResults']);
+        Route::post('/video-analyses', [VideoAnalysisController::class, 'store']);
+        Route::get('/video-analyses', [VideoAnalysisController::class, 'index']);
+        Route::get('/video-analyses/{id}', [VideoAnalysisController::class, 'show']);
+        Route::get('/video-analyses/judge/{judgeId}', [VideoAnalysisController::class, 'getJudgeResults']);
 
         // Consultation routes
         Route::post('/consultations/request', [ConsultationController::class, 'requestConsultation']);
@@ -116,6 +117,11 @@ Route::get('/video-analyses/judge/{judgeId}', [VideoAnalysisController::class, '
         Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
         Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
         Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+        
+        // Chat endpoints
+        Route::get('/contacts', [ChatController::class, 'getContacts']);
+        Route::get('/chat/{contactId}', [ChatController::class, 'getChat']);
+        Route::post('/messages', [ChatController::class, 'sendMessage']);
     });
 });
 

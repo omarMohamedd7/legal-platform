@@ -16,6 +16,7 @@ use Database\Seeders\ConsultationRequestSeeder;
 use Database\Seeders\PaymentSeeder;
 use Database\Seeders\JudgeTaskSeeder;
 use Database\Seeders\VideoAnalysisSeeder;
+use Database\Seeders\ChatSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -38,6 +39,7 @@ class DatabaseSeeder extends Seeder
             LegalBookSeeder::class,
             JudgeTaskSeeder::class,
             VideoAnalysisSeeder::class,
+            ChatSeeder::class,
         ]);
     }
 }

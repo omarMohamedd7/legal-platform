@@ -1,0 +1,263 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		"name": "Chat API Collection",
+		"description": "Collection for testing the Chat API",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "email",
+									"value": "ahmed@client.com",
+									"description": "Client user email",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "password",
+									"description": "Password for all test users",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Login with email and password"
+					},
+					"response": []
+				},
+				{
+					"name": "Lawyer Login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "email",
+									"value": "fahad@lawyer.com",
+									"description": "Lawyer user email",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "password",
+									"description": "Password for all test users",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Login with lawyer credentials"
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/me",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"me"
+							]
+						},
+						"description": "Get the authenticated user's profile"
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/logout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"logout"
+							]
+						},
+						"description": "Logout and invalidate token"
+					},
+					"response": []
+				}
+			],
+			"description": "Authentication endpoints"
+		},
+		{
+			"name": "Chat",
+			"item": [
+				{
+					"name": "Get Contacts",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/contacts",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"contacts"
+							]
+						},
+						"description": "Get all contacts for the authenticated user"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Chat History",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/chat/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"chat",
+								"1"
+							]
+						},
+						"description": "Get chat history with a specific contact (replace 1 with actual contact ID)"
+					},
+					"response": []
+				},
+				{
+					"name": "Send Message",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "receiver_id",
+									"value": "4",
+									"description": "ID of the receiver (e.g., 4 for Fahad Lawyer)",
+									"type": "text"
+								},
+								{
+									"key": "message",
+									"value": "Hello, this is a test message",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/messages",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"messages"
+							]
+						},
+						"description": "Send a message to another user"
+					},
+					"response": []
+				}
+			],
+			"description": "Chat API endpoints"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000/api",
+			"type": "string",
+			"description": "Base URL for the API"
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "string",
+			"description": "Authentication token received after login"
+		}
+	]
+} 
