@@ -68,6 +68,88 @@ class ChatController extends Controller
     }
     
     /**
+     * Initialize contacts between clients and lawyers
+     * This method creates contact entries for all clients and lawyers
+     * to ensure they appear in each other's contact lists
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function initializeContacts()
+    {
+        $user = Auth::user();
+        
+        // Check if user is a client or lawyer
+        $isClient = Client::where('user_id', $user->id)->exists();
+        $isLawyer = Lawyer::where('user_id', $user->id)->exists();
+        
+        if (!$isClient && !$isLawyer) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Only clients and lawyers can use the chat feature'
+            ], 403);
+        }
+        
+        $contactsCreated = 0;
+        
+        // Get all lawyers and clients
+        $lawyers = User::whereHas('lawyer')->get();
+        $clients = User::whereHas('client')->get();
+        
+        // Create contacts for all lawyers and clients
+        if ($isClient) {
+            // If user is a client, create contacts with all lawyers
+            foreach ($lawyers as $lawyer) {
+                $contact = Contact::firstOrCreate([
+                    'user_id' => $user->id,
+                    'contact_user_id' => $lawyer->id
+                ], [
+                    'last_message_date' => now()
+                ]);
+                
+                if ($contact->wasRecentlyCreated) {
+                    $contactsCreated++;
+                }
+                
+                // Create reverse contact for the lawyer
+                Contact::firstOrCreate([
+                    'user_id' => $lawyer->id,
+                    'contact_user_id' => $user->id
+                ], [
+                    'last_message_date' => now()
+                ]);
+            }
+        } else if ($isLawyer) {
+            // If user is a lawyer, create contacts with all clients
+            foreach ($clients as $client) {
+                $contact = Contact::firstOrCreate([
+                    'user_id' => $user->id,
+                    'contact_user_id' => $client->id
+                ], [
+                    'last_message_date' => now()
+                ]);
+                
+                if ($contact->wasRecentlyCreated) {
+                    $contactsCreated++;
+                }
+                
+                // Create reverse contact for the client
+                Contact::firstOrCreate([
+                    'user_id' => $client->id,
+                    'contact_user_id' => $user->id
+                ], [
+                    'last_message_date' => now()
+                ]);
+            }
+        }
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => "Successfully initialized contacts. Created $contactsCreated new contacts.",
+            'contacts_created' => $contactsCreated
+        ]);
+    }
+    
+    /**
      * Get chat history with a specific contact
      *
      * @param int $contactId

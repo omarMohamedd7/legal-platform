@@ -1,4 +1,4 @@
-# Chat Feature Testing Guide
+git# Chat Feature Testing Guide
 
 This guide explains how to test the chat feature including push notifications.
 
@@ -29,7 +29,26 @@ When logging in, provide an FCM token to receive push notifications:
 }
 ```
 
-### 2. Client-Lawyer Chat Flow
+### 2. Initialize Contacts (Important First Step)
+
+Before starting to chat, you need to initialize contacts to see other users in your contact list:
+
+1. **Login as Client or Lawyer**
+2. **Initialize Contacts**:
+   - Send POST request to `/contacts/initialize`
+   - This will create contact entries between you and all available users of the opposite role
+   - Response will show how many contacts were created:
+     ```json
+     {
+       "status": "success",
+       "message": "Successfully initialized contacts. Created 3 new contacts.",
+       "contacts_created": 3
+     }
+     ```
+3. **Get Contacts**:
+   - Now when you send GET request to `/contacts`, you should see all available users
+
+### 3. Client-Lawyer Chat Flow
 
 #### As Client:
 
@@ -90,7 +109,7 @@ When logging in, provide an FCM token to receive push notifications:
      }
      ```
 
-### 3. Push Notification Structure
+### 4. Push Notification Structure
 
 When a message is sent, a push notification is sent to the receiver with:
 
@@ -111,6 +130,7 @@ This data structure allows the Flutter app to:
 
 ## Troubleshooting
 
+- **Empty Contacts List**: If your contacts list is empty, use the `/contacts/initialize` endpoint to create contacts
 - **No FCM Token**: If no FCM token is provided, in-app notifications will still work but push notifications won't be sent
 - **Authorization Errors**: Make sure you're using the correct token in the Authorization header
 - **403 Forbidden**: Only clients and lawyers can communicate with each other
@@ -119,6 +139,7 @@ This data structure allows the Flutter app to:
 
 ### Chat
 - `GET /contacts` - Get all contacts
+- `POST /contacts/initialize` - Initialize contacts between clients and lawyers
 - `GET /chat/{contactId}` - Get chat history with a contact
 - `POST /messages` - Send a message
 

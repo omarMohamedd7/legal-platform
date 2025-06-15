@@ -120,6 +120,7 @@ Route::middleware('throttle:standard')->group(function () {
         
         // Chat endpoints
         Route::get('/contacts', [ChatController::class, 'getContacts']);
+        Route::post('/contacts/initialize', [ChatController::class, 'initializeContacts']);
         Route::get('/chat/{contactId}', [ChatController::class, 'getChat']);
         Route::post('/messages', [ChatController::class, 'sendMessage']);
     });
