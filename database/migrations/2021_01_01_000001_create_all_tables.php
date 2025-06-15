@@ -44,6 +44,7 @@ return new class extends Migration
             $table->string('city');
             $table->string('phone_number')->nullable();
             $table->decimal('consult_fee', 10, 2)->default(0);
+            $table->text('bio')->nullable();
             $table->timestamps();
         });
 
@@ -151,6 +152,7 @@ return new class extends Migration
             $table->decimal('amount', 10, 2);
             $table->enum('payment_method', ['credit_card', 'paypal', 'visa', ]);
             $table->enum('status', ['pending', 'successful', 'failed'])->default('pending');
+            $table->string('transaction_id')->nullable();
             $table->timestamps();
         });
 

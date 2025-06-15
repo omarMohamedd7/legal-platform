@@ -16,7 +16,7 @@ class LawyerSeeder extends Seeder
                 'specialization' => 'Family Law',
                 'city' => 'Riyadh',
                 'consult_fee' => 1000.00,
-                'bio' => 'Experienced family lawyer.',
+                'bio' => 'Experienced family law attorney with over 10 years of practice. Specializing in divorce, child custody, and marriage contracts.',
             ],
             [
                 'user_id' => 4,
@@ -24,7 +24,7 @@ class LawyerSeeder extends Seeder
                 'specialization' => 'Civil Law',
                 'city' => 'Jeddah',
                 'consult_fee' => 1200.00,
-                'bio' => 'Expert in civil cases.',
+                'bio' => 'Civil law specialist with expertise in property disputes, contracts, and commercial agreements. Graduate of King Saud University Law School.',
             ],
         ]);
     }

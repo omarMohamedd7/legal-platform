@@ -14,14 +14,12 @@ class CaseRequestSeeder extends Seeder
                 'client_id' => 1,
                 'lawyer_id' => 1,
                 'case_id' => 1,
-                'attachments' => json_encode(['file1.pdf', 'file2.pdf']),
                 'status' => 'Pending',
             ],
             [
                 'client_id' => 2,
                 'lawyer_id' => 2,
                 'case_id' => 2,
-                'attachments' => json_encode(['file3.pdf']),
                 'status' => 'Accepted',
             ],
         ]);

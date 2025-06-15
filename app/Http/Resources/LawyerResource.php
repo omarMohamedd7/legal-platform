@@ -32,6 +32,7 @@ class LawyerResource extends JsonResource
             'specialization' => $this->specialization,
             'city' => $this->city,
             'consult_fee' => $this->consult_fee,
+            'bio' => $this->bio,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
         ];

@@ -35,7 +35,7 @@ return [
         ],
     ],
     'firebase' => [
-        'config' => base_path('config/firebase.json'),
+        'config' => storage_path('app/firebase/firebase.json'),
     ],
 
 ];

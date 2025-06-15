@@ -3,22 +3,17 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Models\Notification;
 use Exception;
 use Kreait\Firebase\Factory;
 use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Messaging\Notification as MessagingNotification;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Str;
 
 class NotificationService
 {
     protected $messaging;
-
-    /**
-     * Notification retention period in seconds
-     */
-    private const NOTIFICATION_RETENTION = 2592000; // 30 days
 
     public function __construct()
     {
@@ -71,35 +66,26 @@ class NotificationService
     public function sendNotification(int $userId, string $type, string $message, array $data = []): array
     {
         $notificationId = Str::uuid()->toString();
-        $timestamp = now()->timestamp;
         
-        $notification = [
+        // Store notification directly in database
+        $notification = Notification::create([
             'id' => $notificationId,
             'user_id' => $userId,
             'type' => $type,
             'message' => $message,
             'data' => $data,
             'read' => false,
-            'created_at' => $timestamp
+        ]);
+        
+        return [
+            'id' => $notification->id,
+            'user_id' => $notification->user_id,
+            'type' => $notification->type,
+            'message' => $notification->message,
+            'data' => $notification->data,
+            'read' => $notification->read,
+            'created_at' => $notification->created_at->timestamp
         ];
-        
-        // Store notification in Redis sorted set with timestamp as score
-        Redis::zadd(
-            "user:{$userId}:notifications", 
-            $timestamp, 
-            json_encode($notification)
-        );
-        
-        // Set expiry on notifications
-        Redis::expire("user:{$userId}:notifications", self::NOTIFICATION_RETENTION);
-        
-        // Publish notification to Redis channel for real-time updates
-        Redis::publish(
-            "user-notifications:{$userId}", 
-            json_encode($notification)
-        );
-        
-        return $notification;
     }
     
     /**
@@ -113,29 +99,25 @@ class NotificationService
      */
     public function getNotifications(int $userId, int $limit = 20, int $offset = 0, bool $onlyUnread = false): array
     {
-        // Get notifications from Redis sorted set with pagination
-        $notificationsData = Redis::zrevrange(
-            "user:{$userId}:notifications", 
-            $offset, 
-            $offset + $limit - 1
-        );
+        $query = Notification::where('user_id', $userId);
         
-        $notifications = [];
-        foreach ($notificationsData as $notificationJson) {
-            $notification = json_decode($notificationJson, true);
-            
-            // Filter unread if requested
-            if ($onlyUnread && $notification['read']) {
-                continue;
-            }
-            
-            $notifications[] = $notification;
+        if ($onlyUnread) {
+            $query->where('read', false);
         }
+        
+        $total = $query->count();
+        $unread = Notification::where('user_id', $userId)->where('read', false)->count();
+        
+        $notifications = $query->orderBy('created_at', 'desc')
+            ->skip($offset)
+            ->take($limit)
+            ->get()
+            ->toArray();
         
         return [
             'notifications' => $notifications,
-            'total' => Redis::zcard("user:{$userId}:notifications"),
-            'unread' => $this->countUnreadNotifications($userId)
+            'total' => $total,
+            'unread' => $unread
         ];
     }
     
@@ -148,39 +130,14 @@ class NotificationService
      */
     public function markAsRead(int $userId, string $notificationId): bool
     {
-        // Get all notifications
-        $notificationsData = Redis::zrange(
-            "user:{$userId}:notifications", 
-            0, 
-            -1
-        );
+        $notification = Notification::where('user_id', $userId)
+            ->where('id', $notificationId)
+            ->first();
         
-        foreach ($notificationsData as $notificationJson) {
-            $notification = json_decode($notificationJson, true);
-            
-            if ($notification['id'] === $notificationId) {
-                // Mark as read
-                $notification['read'] = true;
-                
-                // Get score (timestamp) of the notification
-                $score = Redis::zscore("user:{$userId}:notifications", $notificationJson);
-                
-                // Remove old notification
-                Redis::zremrangebyscore(
-                    "user:{$userId}:notifications", 
-                    $score, 
-                    $score
-                );
-                
-                // Add updated notification with same score
-                Redis::zadd(
-                    "user:{$userId}:notifications", 
-                    $score, 
-                    json_encode($notification)
-                );
-                
-                return true;
-            }
+        if ($notification) {
+            $notification->read = true;
+            $notification->save();
+            return true;
         }
         
         return false;
@@ -194,41 +151,9 @@ class NotificationService
      */
     public function markAllAsRead(int $userId): int
     {
-        // Get all notifications
-        $notificationsData = Redis::zrange(
-            "user:{$userId}:notifications", 
-            0, 
-            -1
-        );
-        
-        $count = 0;
-        foreach ($notificationsData as $notificationJson) {
-            $notification = json_decode($notificationJson, true);
-            
-            if (!$notification['read']) {
-                // Mark as read
-                $notification['read'] = true;
-                
-                // Get score (timestamp) of the notification
-                $score = Redis::zscore("user:{$userId}:notifications", $notificationJson);
-                
-                // Remove old notification
-                Redis::zremrangebyscore(
-                    "user:{$userId}:notifications", 
-                    $score, 
-                    $score
-                );
-                
-                // Add updated notification with same score
-                Redis::zadd(
-                    "user:{$userId}:notifications", 
-                    $score, 
-                    json_encode($notification)
-                );
-                
-                $count++;
-            }
-        }
+        $count = Notification::where('user_id', $userId)
+            ->where('read', false)
+            ->update(['read' => true]);
         
         return $count;
     }
@@ -241,26 +166,13 @@ class NotificationService
      */
     public function countUnreadNotifications(int $userId): int
     {
-        // Get all notifications
-        $notificationsData = Redis::zrange(
-            "user:{$userId}:notifications", 
-            0, 
-            -1
-        );
-        
-        $unreadCount = 0;
-        foreach ($notificationsData as $notificationJson) {
-            $notification = json_decode($notificationJson, true);
-            if (!$notification['read']) {
-                $unreadCount++;
-            }
-        }
-        
-        return $unreadCount;
+        return Notification::where('user_id', $userId)
+            ->where('read', false)
+            ->count();
     }
     
     /**
-     * Delete notification
+     * Delete a notification
      *
      * @param int $userId
      * @param string $notificationId
@@ -268,31 +180,10 @@ class NotificationService
      */
     public function deleteNotification(int $userId, string $notificationId): bool
     {
-        // Get all notifications
-        $notificationsData = Redis::zrange(
-            "user:{$userId}:notifications", 
-            0, 
-            -1
-        );
+        $deleted = Notification::where('user_id', $userId)
+            ->where('id', $notificationId)
+            ->delete();
         
-        foreach ($notificationsData as $notificationJson) {
-            $notification = json_decode($notificationJson, true);
-            
-            if ($notification['id'] === $notificationId) {
-                // Get score (timestamp) of the notification
-                $score = Redis::zscore("user:{$userId}:notifications", $notificationJson);
-                
-                // Remove notification
-                Redis::zremrangebyscore(
-                    "user:{$userId}:notifications", 
-                    $score, 
-                    $score
-                );
-                
-                return true;
-            }
-        }
-        
-        return false;
+        return $deleted > 0;
     }
 }

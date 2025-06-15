@@ -18,6 +18,7 @@ use App\Http\Controllers\VideoAnalysisController;
 use App\Http\Controllers\LegalBookController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\NotificationController;
 
 Route::middleware('throttle:standard')->group(function () {
     // Auth
@@ -42,6 +43,8 @@ Route::middleware('throttle:standard')->group(function () {
 
         // Profile
         Route::middleware('auth:sanctum')->put('/profilee', [ProfileController::class, 'updateProfile']);
+        Route::middleware('auth:sanctum')->post('/profile/picture', [ProfilePictureController::class, 'upload']);
+        Route::middleware('auth:sanctum')->delete('/profile/picture', [ProfilePictureController::class, 'delete']);
 
         
       
@@ -69,6 +72,8 @@ Route::middleware('throttle:standard')->group(function () {
         // Client
         Route::get('/client/city-lawyers', [LawyerController::class, 'getLawyersInClientCity']);
         Route::get('/client/case-offers', [CaseOfferController::class, 'getClientCaseOffers']);
+        Route::get('/client/cases', [ClientController::class, 'getCases']);
+        Route::get('/client/active-cases', [ClientController::class, 'getActiveCases']);
 
         // Case Offers
         Route::post('/case-offers/{id}/action', [CaseOfferController::class, 'processOfferAction']);
@@ -97,14 +102,16 @@ Route::get('/video-analyses/{id}', [VideoAnalysisController::class, 'show']);
 Route::get('/video-analyses/judge/{judgeId}', [VideoAnalysisController::class, 'getJudgeResults']);
 
         // Consultation routes
-        Route::post('/consultations/request', [ConsultationController::class, 'requestConsultation'])
-            ->middleware('rate_limit:consultation_request');
+        Route::post('/consultations/request', [ConsultationController::class, 'requestConsultation']);
         
         // Payment endpoint
-        Route::post('/payments', [PaymentController::class, 'processPayment'])
-            ->middleware('rate_limit:payment_process');
-        Route::get('/payments/{id}', [PaymentController::class, 'getPayment']);
+        Route::post('/payments', [PaymentController::class, 'processPayment']);
 
+        // Notifications
+        Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+        Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+        Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
     });
 });
 

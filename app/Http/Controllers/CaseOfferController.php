@@ -108,8 +108,8 @@ class CaseOfferController extends Controller
         if ($client && $client->fcm_token) {
             $this->notificationService->sendToUser(
                 $client,
-                'New Case Offer',
-                "A lawyer has submitted an offer for your case: {$publishedCase->legalCase->case_number}",
+                'عرض جديد على القضية',
+                "قام محامي بتقديم عرض على قضيتك: {$publishedCase->legalCase->case_number}",
                 [
                     'published_case_id' => $publishedCaseId,
                     'offer_id' => $offer->offer_id,
@@ -193,8 +193,8 @@ class CaseOfferController extends Controller
             if ($lawyer && $lawyer->fcm_token) {
                 $this->notificationService->sendToUser(
                     $lawyer,
-                    'Offer Accepted',
-                    "Your offer for case {$legalCase->case_number} has been accepted.",
+                    'تم قبول العرض',
+                    "تم قبول عرضك على القضية {$legalCase->case_number}.",
                     [
                         'offer_id' => $offer->offer_id,
                         'case_id' => $legalCase->case_id,
@@ -270,8 +270,8 @@ class CaseOfferController extends Controller
         if ($lawyer && $lawyer->fcm_token) {
             $this->notificationService->sendToUser(
                 $lawyer,
-                'Offer Rejected',
-                "Your offer has been rejected by the client.",
+                'تم رفض العرض',
+                "تم رفض عرضك من قبل العميل.",
                 [
                     'offer_id' => $offer->offer_id,
                     'published_case_id' => $offer->published_case_id,
@@ -533,8 +533,8 @@ class CaseOfferController extends Controller
                 if ($lawyer && $lawyer->fcm_token) {
                     $this->notificationService->sendToUser(
                         $lawyer,
-                        'Offer Accepted',
-                        "Your offer for case {$legalCase->case_number} has been accepted.",
+                        'تم قبول العرض',
+                        "تم قبول عرضك على القضية {$legalCase->case_number}.",
                         [
                             'offer_id' => $offer->offer_id,
                             'case_id' => $legalCase->case_id,
@@ -569,8 +569,8 @@ class CaseOfferController extends Controller
             if ($lawyer && $lawyer->fcm_token) {
                 $this->notificationService->sendToUser(
                     $lawyer,
-                    'Offer Rejected',
-                    "Your offer for case {$offer->publishedCase->legalCase->case_number} has been rejected.",
+                    'تم رفض العرض',
+                    "تم رفض عرضك من قبل العميل.",
                     [
                         'offer_id' => $offer->offer_id,
                         'published_case_id' => $offer->published_case_id,

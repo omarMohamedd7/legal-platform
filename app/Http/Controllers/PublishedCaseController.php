@@ -83,8 +83,8 @@ class PublishedCaseController extends Controller
                 if ($lawyer->user && $lawyer->user->fcm_token) {
                     $this->notificationService->sendToUser(
                         $lawyer->user,
-                        'New Case Available',
-                        "A new case matching your specialization is available in your city.",
+                        'قضية جديدة متاحة',
+                        "هناك قضية جديدة متاحة تناسب تخصصك في مدينتك.",
                         [
                             'published_case_id' => $publishedCase->published_case_id,
                             'case_type' => $validated['case_type'],

@@ -37,6 +37,7 @@ class LawyerController extends Controller
             'phone' => 'nullable|string|max:20',
             'city' => 'nullable|string|max:255',
             'consult_fee' => 'nullable|numeric|min:0',
+            'bio' => 'nullable|string',
             'name' => 'nullable|string|max:255',
             'email' => 'nullable|email|max:255|unique:users,email,' . $lawyer->user->id,
             'profile_image_url' => 'nullable|string|max:255', // Updated field name for consistency
@@ -49,6 +50,7 @@ class LawyerController extends Controller
             'phone' => $validated['phone'] ?? $lawyer->phone,
             'city' => $validated['city'] ?? $lawyer->city,
             'consult_fee' => $validated['consult_fee'] ?? $lawyer->consult_fee,
+            'bio' => $validated['bio'] ?? $lawyer->bio,
         ]);
         
         // Handle profile image upload if provided
@@ -163,6 +165,7 @@ class LawyerController extends Controller
                     'specialization' => $lawyer->specialization,
                     'city' => $lawyer->city,
                     'consult_fee' => $lawyer->consult_fee,
+                    'bio' => $lawyer->bio,
                     'profile_image_url' => $lawyer->user->profile_image_url ? url($lawyer->user->profile_image_url) : null,
                 ];
             });
@@ -233,6 +236,7 @@ class LawyerController extends Controller
                     'specialization' => $lawyer->specialization,
                     'city' => $lawyer->city,
                     'consult_fee' => $lawyer->consult_fee,
+                    'bio' => $lawyer->bio,
                     'profile_image_url' => $lawyer->user->profile_image_url ? url($lawyer->user->profile_image_url) : null,
                 ];
             });

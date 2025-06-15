@@ -118,8 +118,8 @@ class CaseRequestController extends Controller
             if ($lawyerUser && $lawyerUser->fcm_token) {
                 $this->notificationService->sendToUser(
                     $lawyerUser,
-                    'New Case Request',
-                    "You have received a new case request from {$user->name}",
+                    'طلب قضية جديد',
+                    "لقد استلمت طلب قضية جديد من {$user->name}",
                     [
                         'request_id' => $caseRequest->request_id,
                         'case_id' => $legalCase->case_id,
@@ -233,8 +233,8 @@ class CaseRequestController extends Controller
                 if ($clientUser && $clientUser->fcm_token) {
                     $this->notificationService->sendToUser(
                         $clientUser,
-                        'Case Request Accepted',
-                        "Your case request has been accepted by the lawyer.",
+                        'تم قبول طلب القضية',
+                        "تم قبول طلب القضية الخاص بك من قبل المحامي.",
                         [
                             'request_id' => $caseRequest->request_id,
                             'case_id' => $caseRequest->case->case_id,
@@ -264,8 +264,8 @@ class CaseRequestController extends Controller
                 if ($clientUser && $clientUser->fcm_token) {
                     $this->notificationService->sendToUser(
                         $clientUser,
-                        'Case Request Rejected',
-                        "Your case request has been rejected by the lawyer.",
+                        'تم رفض طلب القضية',
+                        "تم رفض طلب القضية الخاص بك من قبل المحامي.",
                         [
                             'request_id' => $caseRequest->request_id,
                             'type' => 'case_request_rejected'
