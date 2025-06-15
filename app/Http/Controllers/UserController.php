@@ -14,14 +14,18 @@ use App\Http\Resources\UserResource;
 use App\Http\Resources\UserCollection;
 use Illuminate\Support\Facades\DB;
 use App\Services\OtpService;
+use App\Http\Controllers\ChatController;
+use Illuminate\Support\Facades\Auth;
 
 class UserController extends Controller
 {
     protected $otpService;
+    protected $chatController;
     
-    public function __construct(OtpService $otpService)
+    public function __construct(OtpService $otpService, ChatController $chatController)
     {
         $this->otpService = $otpService;
+        $this->chatController = $chatController;
     }
 
     // عرض كل المستخدمين (اختياري)
@@ -199,6 +203,14 @@ class UserController extends Controller
                 // Generate and send OTP for account verification
                 $otp = $this->otpService->generateOtp($user);
                 $this->otpService->sendOtpEmail($user, $otp, 'authentication');
+                
+                // Initialize contacts for the new user if they are a client or lawyer
+                if ($validated['role'] === 'client' || $validated['role'] === 'lawyer') {
+                    // Temporarily authenticate the user for contact initialization
+                    Auth::login($user);
+                    $this->chatController->initializeContacts();
+                    Auth::logout();
+                }
                 
                 // Refresh user to get updated data
                 $user = $user->fresh();

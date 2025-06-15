@@ -46,25 +46,94 @@ class ChatController extends Controller
             ], 403);
         }
         
-        // Get all contacts where the user is either the user or the contact
-        $contacts = Contact::where('user_id', $user->id)
+        // Initialize contacts first to ensure all contacts have real IDs
+        $this->initializeContacts();
+        
+        // Get all contacts where the user is either the owner or the contact user
+        $ownedContacts = Contact::where('user_id', $user->id)
             ->with('contactUser')
+            ->get();
+            
+        $contactingContacts = Contact::where('contact_user_id', $user->id)
+            ->with('user')
             ->get()
             ->map(function ($contact) {
-                // Format the response to match the frontend model
-                return [
+                // Transform the contact to have the same structure as owned contacts
+                // by swapping user_id and contact_user_id
+                return (object)[
                     'id' => $contact->id,
-                    'name' => $contact->name,
-                    'role' => $contact->role,
-                    'lastMessageDate' => $contact->last_message_date,
-                    'lastMessage' => $contact->last_message ? $contact->last_message->message : null
+                    'user_id' => $contact->contact_user_id,
+                    'contact_user_id' => $contact->user_id,
+                    'contactUser' => $contact->user,
+                    'last_message_date' => $contact->last_message_date,
+                    'created_at' => $contact->created_at,
+                    'updated_at' => $contact->updated_at
                 ];
             });
             
+        // Combine both lists
+        $contacts = $ownedContacts->concat($contactingContacts);
+        
+        // Remove duplicates by keeping only one contact per unique contact_user_id
+        $uniqueContacts = collect();
+        $seenContactUserIds = [];
+        
+        foreach ($contacts as $contact) {
+            if (!in_array($contact->contact_user_id, $seenContactUserIds)) {
+                $uniqueContacts->push($contact);
+                $seenContactUserIds[] = $contact->contact_user_id;
+            }
+        }
+        
+        // Format contacts
+        $formattedContacts = $uniqueContacts->map(function ($contact) {
+            // Determine role based on the contactUser
+            $role = 'unknown';
+            if ($contact->contactUser->lawyer()->exists()) {
+                $role = 'lawyer';
+            } elseif ($contact->contactUser->client()->exists()) {
+                $role = 'client';
+            } elseif ($contact->contactUser->judge()->exists()) {
+                $role = 'judge';
+            }
+            
+            return [
+                'id' => $contact->id,
+                'name' => $contact->contactUser->name,
+                'role' => $role,
+                'userId' => $contact->contact_user_id,
+                'lastMessageDate' => $contact->last_message_date,
+                'lastMessage' => $this->getLastMessageForContact($contact->user_id, $contact->contact_user_id)
+            ];
+        })->toArray();
+            
         return response()->json([
             'status' => 'success',
-            'data' => $contacts
+            'data' => $formattedContacts
         ]);
+    }
+    
+    /**
+     * Get the last message between two users
+     *
+     * @param int $userId
+     * @param int $contactUserId
+     * @return string|null
+     */
+    private function getLastMessageForContact($userId, $contactUserId)
+    {
+        $lastMessage = Message::where(function ($query) use ($userId, $contactUserId) {
+                $query->where('sender_id', $userId)
+                      ->where('receiver_id', $contactUserId);
+            })
+            ->orWhere(function ($query) use ($userId, $contactUserId) {
+                $query->where('sender_id', $contactUserId)
+                      ->where('receiver_id', $userId);
+            })
+            ->latest()
+            ->first();
+            
+        return $lastMessage ? $lastMessage->message : null;
     }
     
     /**
@@ -92,10 +161,9 @@ class ChatController extends Controller
         $contactsCreated = 0;
         
         // Get all lawyers and clients
-        $lawyers = User::whereHas('lawyer')->get();
-        $clients = User::whereHas('client')->get();
+        $lawyers = User::whereHas('lawyer')->where('id', '!=', $user->id)->get();
+        $clients = User::whereHas('client')->where('id', '!=', $user->id)->get();
         
-        // Create contacts for all lawyers and clients
         if ($isClient) {
             // If user is a client, create contacts with all lawyers
             foreach ($lawyers as $lawyer) {
@@ -118,7 +186,9 @@ class ChatController extends Controller
                     'last_message_date' => now()
                 ]);
             }
-        } else if ($isLawyer) {
+        } 
+        
+        if ($isLawyer) {
             // If user is a lawyer, create contacts with all clients
             foreach ($clients as $client) {
                 $contact = Contact::firstOrCreate([
@@ -173,32 +243,36 @@ class ChatController extends Controller
         $contact = Contact::findOrFail($contactId);
         
         // Ensure the user is authorized to access this contact
-        if ($contact->user_id !== $user->id) {
+        // User can access the contact if they are either the owner or the contact user
+        if ($contact->user_id !== $user->id && $contact->contact_user_id !== $user->id) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Unauthorized access to this contact'
             ], 403);
         }
         
-        // Get all messages between the user and the contact
-        $messages = Message::where(function ($query) use ($user, $contact) {
+        // Get the other user ID (either contact_user_id or user_id depending on who is accessing)
+        $otherUserId = ($contact->user_id === $user->id) ? $contact->contact_user_id : $contact->user_id;
+        
+        // Get all messages between the user and the other user
+        $messages = Message::where(function ($query) use ($user, $otherUserId) {
                 $query->where('sender_id', $user->id)
-                      ->where('receiver_id', $contact->contact_user_id);
+                      ->where('receiver_id', $otherUserId);
             })
-            ->orWhere(function ($query) use ($user, $contact) {
-                $query->where('sender_id', $contact->contact_user_id)
+            ->orWhere(function ($query) use ($user, $otherUserId) {
+                $query->where('sender_id', $otherUserId)
                       ->where('receiver_id', $user->id);
             })
             ->orderBy('created_at', 'asc')
             ->get()
-            ->map(function ($message) {
+            ->map(function ($message) use ($user) {
                 // Format the response to match the frontend model
                 return [
                     'id' => $message->id,
                     'senderId' => $message->sender_id,
                     'receiverId' => $message->receiver_id,
                     'message' => $message->message,
-                    'isSender' => $message->is_sender,
+                    'isSender' => $message->sender_id === $user->id,
                     'createdAt' => $message->created_at
                 ];
             });
@@ -249,38 +323,50 @@ class ChatController extends Controller
         $isReceiverClient = Client::where('user_id', $receiver->id)->exists();
         $isReceiverLawyer = Lawyer::where('user_id', $receiver->id)->exists();
         
-        // Check if the communication is between a client and a lawyer
-        if (($isClient && !$isReceiverLawyer) || ($isLawyer && !$isReceiverClient)) {
+        // Check if the receiver is a valid user (client or lawyer)
+        if (!$isReceiverClient && !$isReceiverLawyer) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Communication is only allowed between clients and lawyers'
+                'message' => 'Receiver must be a client or lawyer'
             ], 403);
         }
         
-        // Create or update contact
-        $contact = Contact::firstOrCreate(
-            [
+        // Find existing contact or create a new one
+        // First check if the contact exists where user is the owner
+        $contact = Contact::where('user_id', $user->id)
+            ->where('contact_user_id', $receiverId)
+            ->first();
+            
+        // If not found, check if the contact exists where user is the contact user
+        if (!$contact) {
+            $contact = Contact::where('user_id', $receiverId)
+                ->where('contact_user_id', $user->id)
+                ->first();
+        }
+        
+        // If still not found, create a new contact
+        if (!$contact) {
+            $contact = Contact::create([
                 'user_id' => $user->id,
-                'contact_user_id' => $receiverId
-            ],
-            [
+                'contact_user_id' => $receiverId,
                 'last_message_date' => now()
-            ]
-        );
-        
-        // Update the last message date
-        $contact->update(['last_message_date' => now()]);
-        
-        // Create a contact for the receiver as well if it doesn't exist
-        Contact::firstOrCreate(
-            [
+            ]);
+            
+            // Create a contact for the receiver as well
+            Contact::create([
                 'user_id' => $receiverId,
-                'contact_user_id' => $user->id
-            ],
-            [
+                'contact_user_id' => $user->id,
                 'last_message_date' => now()
-            ]
-        );
+            ]);
+        } else {
+            // Update the last message date
+            $contact->update(['last_message_date' => now()]);
+            
+            // Update the last message date for the other contact as well
+            Contact::where('user_id', $receiverId)
+                ->where('contact_user_id', $user->id)
+                ->update(['last_message_date' => now()]);
+        }
         
         // Create the message
         $message = Message::create([

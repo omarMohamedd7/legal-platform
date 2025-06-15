@@ -50,7 +50,18 @@ class Contact extends Model
 
     public function getRoleAttribute()
     {
-        return $this->contactUser->role;
+        // Determine the role based on relationships
+        $user = $this->contactUser;
+        
+        if ($user->lawyer()->exists()) {
+            return 'lawyer';
+        } elseif ($user->client()->exists()) {
+            return 'client';
+        } elseif ($user->judge()->exists()) {
+            return 'judge';
+        } else {
+            return 'unknown';
+        }
     }
 
     public function getLastMessageAttribute()

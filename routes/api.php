@@ -101,10 +101,10 @@ Route::middleware('throttle:standard')->group(function () {
         Route::get('/legal-books/{id}/download', [LegalBookController::class, 'download']);
 
         // Video Analysis endpoints
-        Route::post('/video-analyses', [VideoAnalysisController::class, 'store']);
-        Route::get('/video-analyses', [VideoAnalysisController::class, 'index']);
-        Route::get('/video-analyses/{id}', [VideoAnalysisController::class, 'show']);
-        Route::get('/video-analyses/judge/{judgeId}', [VideoAnalysisController::class, 'getJudgeResults']);
+Route::post('/video-analyses', [VideoAnalysisController::class, 'store']);
+Route::get('/video-analyses', [VideoAnalysisController::class, 'index']);
+Route::get('/video-analyses/{id}', [VideoAnalysisController::class, 'show']);
+Route::get('/video-analyses/judge/{judgeId}', [VideoAnalysisController::class, 'getJudgeResults']);
 
         // Consultation routes
         Route::post('/consultations/request', [ConsultationController::class, 'requestConsultation']);
