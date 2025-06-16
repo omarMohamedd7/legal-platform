@@ -372,7 +372,8 @@ class ChatController extends Controller
         $message = Message::create([
             'sender_id' => $user->id,
             'receiver_id' => $receiverId,
-            'message' => $messageText
+            'message' => $messageText,
+            
         ]);
         
         // Create notification data with sender_id and message
@@ -384,13 +385,21 @@ class ChatController extends Controller
         // Send push notification to the receiver
         if ($receiver->fcm_token) {
             $title = $user->name;
-            $body = $messageText;
+            $body = [
+                'message' => $messageText,
+                'senderId' => $user->id,
+                'type' => 'chat',
+                'receiverId' => $receiverId,
+                'id' => $message->id,
+                'createdAt' => $message->created_at,
+                'isSender' => false,
+            ];
             
             // Send push notification with the required data
             $this->notificationService->sendToUser(
                 $receiver, 
                 $title, 
-                $body, 
+                json_encode($body), 
                 $notificationData
             );
         }
