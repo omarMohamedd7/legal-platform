@@ -69,11 +69,14 @@ class CaseRequestController extends Controller
 
             if ($request->hasFile('attachment')) {
                 $file = $request->file('attachment');
-                $path = $file->store('case_attachments', 'public');
-
+                // $path = $file->store('case_attachments', 'public');
+                $uploadPath = public_path('uploads/attachments');
+                $filename = time() . '.' . $file->getClientOriginalExtension();
+                $file->move($uploadPath, $filename);
+                $attachmentUrl = 'uploads/attachments/' . $filename;
                 $attachmentObject = [
-                    'path' => $path,
-                    'url' => asset('storage/' . $path),
+                    'path' => $uploadPath,
+                    'url' => $attachmentUrl,
                     'type' => $file->getClientMimeType(),
                     'name' => $file->getClientOriginalName(),
                     'uploaded_by' => $user->id,
